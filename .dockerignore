@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+tmp/
+*.mp4
+*.ts
+*.log
