@@ -1237,6 +1237,61 @@ function registroLoQueFunciona(){
     <div class="note">Va mejor: <b>${nombreCorto[orden[0]]}</b>. El diario ya le da más peso al que mejor funciona.</div>`;
 }
 
+/* =========================================================
+   DETECTOR DE MAÑAS DE LA MÁQUINA
+   Prueba estadística: ¿algún número sale más (o menos) de lo que daría
+   la pura suerte? Revisa todo el historial y también los últimos 150
+   sorteos (por si cambiaron bolas o máquina). Si encuentra una maña
+   clara, la predicción sin pistas la aprovecha.
+   ========================================================= */
+const erfAprox = x => { const t = 1/(1+0.3275911*Math.abs(x)); const y = 1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x); return x>=0 ? y : -y; };
+const normalCDF = z => 0.5*(1+erfAprox(z/Math.SQRT2));
+function pChiCuadrado(x, k){ const z = (Math.pow(x/k, 1/3) - (1 - 2/(9*k))) / Math.sqrt(2/(9*k)); return 1 - normalCDF(z); }
+const Z_FUERTE = 3.02;   // umbral corregido por revisar 40 números a la vez (95% de confianza)
+
+function analizarGrupo(H){
+  const N = H.length, p = K/MAX, e = N*p, sd = Math.sqrt(N*p*(1-p));
+  const c = new Array(MAX+1).fill(0); H.forEach(h=>h.nums.forEach(n=>c[n]++));
+  let chi = 0; const z = new Array(MAX+1).fill(0);
+  for(let n=MIN;n<=MAX;n++){ chi += (c[n]-e)**2/e; z[n] = sd ? (c[n]-e)/sd : 0; }
+  // corrección: en cada sorteo salen 6 distintos, el chi-cuadrado con k-1 grados es aproximado
+  const pval = N ? pChiCuadrado(chi*(MAX-1)/MAX/(1-p), MAX-1) : 1;
+  const fuertes = []; for(let n=MIN;n<=MAX;n++) if(Math.abs(z[n])>=Z_FUERTE) fuertes.push(n);
+  const orden = [...Array(MAX).keys()].map(i=>i+1).sort((a,b)=>z[b]-z[a]);
+  return { N, c, e, z, pval, fuertes, calientes: orden.slice(0,5), frios: orden.slice(-5).reverse() };
+}
+function analizarRepeticion(H){
+  // ¿Repite más números del sorteo anterior de lo normal? (solo sorteos seguidos, máx. 7 días de diferencia)
+  let s = 0, n = 0;
+  for(let i=1;i<H.length;i++){
+    const d = (new Date(H[i].fecha) - new Date(H[i-1].fecha))/86400000;
+    if(d>0 && d<=7){ s += inter(H[i].nums, H[i-1].nums); n++; }
+  }
+  const media = K*K/MAX, varr = K*(K/MAX)*((MAX-K)/MAX)*((MAX-K)/(MAX-1));
+  const prom = n ? s/n : 0, z = n ? (prom-media)/Math.sqrt(varr/n) : 0;
+  return { pares: n, prom, esperado: media, z };
+}
+function detectorMañas(){
+  const H = historial();
+  const todo = analizarGrupo(H), rec = analizarGrupo(H.slice(-150)), rep = analizarRepeticion(H);
+  const activa = (rec.pval<0.01 && rec.fuertes.length) ? rec : (todo.pval<0.01 && todo.fuertes.length) ? todo : null;
+  return { todo, rec, rep, activa };
+}
+let MAÑA_CACHE = null;
+function textoDetector(){
+  const D = detectorMañas(); MAÑA_CACHE = D;
+  const fmtP = p => p<0.001 ? "menos de 0.1%" : `${(p*100).toFixed(1)}%`;
+  const veredicto = g => g.pval<0.01 ? `<b style="color:var(--warn)">posible maña</b> (probabilidad de que sea suerte: ${fmtP(g.pval)})` : `sin maña detectable (probabilidad de que sea suerte: ${fmtP(g.pval)})`;
+  const lista = (g, arr) => arr.map(n=>`${n} (${g.c[n]} veces, ${g.z[n]>=0?"+":""}${g.z[n].toFixed(1)})`).join(", ");
+  return `<div class="sub" style="margin-top:8px">🔎 <b>Detector de mañas de la máquina</b></div>
+    <div class="note">Todo el historial (${D.todo.N} sorteos): ${veredicto(D.todo)}.</div>
+    <div class="note">Últimos ${D.rec.N} sorteos: ${veredicto(D.rec)}.</div>
+    <div class="note">Más salen (últimos ${D.rec.N}): ${lista(D.rec, D.rec.calientes)}. Menos salen: ${lista(D.rec, D.rec.frios)}. Cada número debería salir unas ${D.rec.e.toFixed(0)} veces; el número entre paréntesis dice qué tan lejos está de lo normal (más de ±3 sería raro de verdad).</div>
+    <div class="note">Números fuera de lo normal: ${D.rec.fuertes.length ? D.rec.fuertes.join(", ") : "ninguno"}.</div>
+    <div class="note">Repetición del sorteo anterior: repite ${D.rep.prom.toFixed(2)} números en promedio (lo normal es ${D.rep.esperado.toFixed(2)}), en ${D.rep.pares} pares de sorteos seguidos${Math.abs(D.rep.z)>=2.6 ? ` → <b style="color:var(--warn)">fuera de lo normal</b>` : " → normal"}.</div>
+    <div class="note">${D.activa ? `✅ Maña detectada: la predicción sin pistas le da un empujón a ${D.activa.fuertes.filter(n=>D.activa.z[n]>0).join(", ") || "—"}.` : "La predicción sin pistas no usa mañas porque todavía no hay ninguna clara. Con más sorteos el detector se vuelve más sensible."}</div>`;
+}
+
 /* Predicción SIN pistas: la mejor combinación según todo lo aprendido del historial */
 function prediccionSinPistas(P, fechaSorteo){
   const { muestra } = explorar([], 4000);
@@ -1246,7 +1301,10 @@ function prediccionSinPistas(P, fechaSorteo){
   if(H.length<3) return muestra[0];   // casi sin sorteos anteriores: no hay de dónde aprender
   P = aprender(H);
   const ult = H.length ? H[H.length-1] : { nums: [] };
-  const DIA = construirDiario(H); const pts = DIA.puntos; ULTIMO_DIARIO = DIA;
+  const DIA = construirDiario(H); const pts = Float32Array.from(DIA.puntos); ULTIMO_DIARIO = DIA;
+  { const g = analizarGrupo(H.slice(-150));
+    if(g.pval<0.01){ let mx = 0; for(let x=MIN;x<=MAX;x++) mx = Math.max(mx, pts[x]);
+      for(let x=MIN;x<=MAX;x++) if(g.z[x]>=Z_FUERTE) pts[x] += 0.5*mx; } }
   let mn = Infinity, mx = -Infinity; for(let x=MIN;x<=MAX;x++){ mn = Math.min(mn, pts[x]); mx = Math.max(mx, pts[x]); }
   const rango = (mx-mn) || 1;
   // 1) las mejores según los pesos aprendidos, 2) desempate por forma típica
@@ -1472,7 +1530,7 @@ function pintarAprendizaje(){
   $("aprendizaje").innerHTML = `<b>Lo que ha aprendido:</b><br>${fila("patrones","Patrones")}<br>${fila("informacion","Máxima información")}<br>
     🔮 <b>Sin pistas en tus partidas:</b> ${spTxt}<br>
     &nbsp;&nbsp;🏋️ Entrenamiento: ${resumenSP(spE)}<br>
-    &nbsp;&nbsp;🎯 <b>En vivo (lo que de verdad mide):</b> ${resumenSP(spV)} (azar: 0.90)<br><i>${a.porque}</i>${tableroProgreso()}${registroLoQueFunciona()}${textoDiario()}`;
+    &nbsp;&nbsp;🎯 <b>En vivo (lo que de verdad mide):</b> ${resumenSP(spV)} (azar: 0.90)<br><i>${a.porque}</i>${textoDetector()}${tableroProgreso()}${registroLoQueFunciona()}${textoDiario()}`;
 }
 
 function pintarJuego(){
