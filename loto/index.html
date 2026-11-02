@@ -77,6 +77,7 @@
     <button id="fechaBtn" class="fechaBtn">📅 Elegir fecha</button>
     <label for="realComp">Sorteo real (solo para que tú compares; el sistema no lo ve ni se guarda)</label>
     <input id="realComp" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej: 11,15,16,20,29,31">
+    <div id="realAviso" class="note" style="margin-top:4px"></div>
     <div class="flex" style="margin-top:12px">
       <button id="btnNueva">🎯 Con pistas</button>
       <button id="btnSinPistas" style="background:var(--acc);color:#04210f">🔮 Sin pistas</button>
@@ -1424,6 +1425,11 @@ function terminar(){
 function enviarAciertos(){
   const a = parseInt($("acDes").value);
   if(isNaN(a) || a<0 || a>6){ $("msgDes").innerHTML = '<span class="bad">Escribe un número del 0 al 6.</span>'; return; }
+  const Rc = realComp();
+  if(Rc){ const k = JUEGO.propuesta.combo.filter(n=>Rc.includes(n)).length;
+    if(k!==a && !window.__confirmaDistinto){ window.__confirmaDistinto = true;
+      $("msgDes").innerHTML = `<span class="bad">Según el sorteo real que pusiste, aquí hay ${k} acierto(s), no ${a}. Revisa; si de verdad son ${a}, toca Enviar otra vez.</span>`; return; } }
+  window.__confirmaDistinto = false;
   const t = { combo: JUEGO.propuesta.combo, aciertos: a, posiblesAntes: JUEGO.propuesta.posiblesAntes };
   JUEGO.intentos.push(t);
   if(a===6){ t.posiblesDespues = 1; JUEGO.estado = "ganó"; terminar(); pintarJuego(); return; }
@@ -1625,7 +1631,9 @@ function pintarJuego(){
       <div id="verDes" class="note" style="margin-top:6px"></div>`;
   }
   box.innerHTML = cuerpo + (filas ? `<div class="sub" style="margin-top:10px">Intentos de esta partida:</div>${filas}` : "");
-  if($("btnAc")){ $("btnAc").onclick = enviarAciertos; }
+  if($("btnAc")){ $("btnAc").onclick = enviarAciertos;
+    const R = realComp();
+    if(R && J.propuesta){ const k = J.propuesta.combo.filter(n=>R.includes(n)).length; if(k<6) $("acDes").value = k; } }
   if($("btnSi")) $("btnSi").onclick = confirmarCorrecta;
   if($("btnNoEra")) $("btnNoEra").onclick = deshacerVictoria;
   if($("btnVer")) $("btnVer").onclick = verificar;
@@ -1673,6 +1681,17 @@ function iniciarDesafio(){
   };
 
   $("realComp").addEventListener("input", ()=>{
+    const txt = $("realComp").value.trim(), av = $("realAviso");
+    if(!txt) av.innerHTML = "";
+    else {
+      const nums = txt.split(/[\s,;.\-]+/).filter(Boolean).map(Number);
+      const uniq = new Set(nums);
+      if(nums.some(n=>!Number.isInteger(n)||n<MIN||n>MAX)) av.innerHTML = '<span class="bad">⚠️ Hay un número fuera del 1 al 40.</span>';
+      else if(uniq.size!==nums.length) av.innerHTML = '<span class="bad">⚠️ Hay un número repetido.</span>';
+      else if(nums.length<6) av.innerHTML = `<span class="bad">⚠️ Tiene ${nums.length} número(s): faltan ${6-nums.length}. Sin los 6, no puedo comparar.</span>`;
+      else if(nums.length>6) av.innerHTML = `<span class="bad">⚠️ Tiene ${nums.length} números: sobran ${nums.length-6}.</span>`;
+      else av.innerHTML = '<span class="ok">✓ 6 números: los aciertos se marcan en amarillo y se llenan solos.</span>';
+    }
     if(JUEGO && JUEGO.estado==="jugando") pintarJuego();
     if(ULTIMA_SP){
       const box = $("sinPistasRes"), balls = box.querySelector(".balls");
