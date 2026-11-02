@@ -664,8 +664,9 @@ function pintar(){
   }
   $("freq").innerHTML = f;
 
-  // Historial
+  // Historial (la lista larga solo se dibuja con "Ver más opciones" abierto)
   $("histCount").textContent = H.length;
+  if(!$("avanzado").open) return P;
   const extraSet = new Set(extra.map(e=>e.fecha+e.nums.join()));
   $("historial").innerHTML = [...H].reverse().map(h=>{
     const esExtra = extraSet.has(h.fecha+h.nums.join());
@@ -686,6 +687,7 @@ function resumen(grupo){
            consec: prom("consecutivos"), rango: prom("rango"), freq, top };
 }
 function pintarComparacion(){
+  if(!$("avanzado").open) return;
   const A = HISTORIAL_ARCHIVO, B = HISTORIAL_BASE;
   const PA = aprender(A), rA = resumen(A), rB = resumen(B);
   // Parecido de cada sorteo con el patrón del archivo
@@ -1163,6 +1165,10 @@ function proponer(){
 }
 
 function terminar(){
+  if(JUEGO.practica){
+    JUEGO.guardada = { fecha: hoyISO(), objetivo: "Práctica", estrategia: JUEGO.estrategia, resultado: JUEGO.estado, intentos: JUEGO.intentos, errores: [...JUEGO.errores, "Partida de práctica: no se guardó ni cuenta para el aprendizaje."], quedaban: JUEGO.quedaban };
+    return;
+  }
   const m = {
     fecha: new Date().toISOString().slice(0,10),
     objetivo: JUEGO.objetivo || "Sin nombre",
@@ -1329,6 +1335,7 @@ function textoCoinciden(combo){
 
 /* ---------- Pantalla ---------- */
 function pintarAprendizaje(){
+  if(!$("avanzado").open) return;
   const st = estadisticas(), a = estrategiaAuto();
   const fila = (k,n) => { const e = st[k]; return e ? `${n}: ${e.partidas} partida(s), ${e.ganadas} ganada(s), promedio ${(e.sumaIntentos/e.partidas).toFixed(1)} intentos` : `${n}: sin partidas`; };
   const ganadas = memoria().filter(m=>m.sinPistas!=null && m.resultado==="ganó");
@@ -1358,7 +1365,7 @@ function pintarJuego(){
       <div class="grid" style="margin-bottom:8px">
         <div class="stat"><b>${J.intentos.length+1} / ${LIMITE}</b><span>Intento</span></div>
         <div class="stat"><b class="ok">${fmt(J.propuesta.posiblesAntes)}</b><span>Combinaciones posibles</span></div></div>
-      <div class="note" style="margin-bottom:6px">${ETIQUETA_TIPO[J.tipo||"entrenamiento"]}${J.fechaSorteo?` · ${fmtFecha(J.fechaSorteo)}`:""} · Estrategia: ${J.estrategia==="informacion"?"máxima información":"patrones"}</div>
+      <div class="note" style="margin-bottom:6px">${J.practica ? "🧪 Práctica (no se guarda) · " : ""}${ETIQUETA_TIPO[J.tipo||"entrenamiento"]}${J.fechaSorteo?` · ${fmtFecha(J.fechaSorteo)}`:""} · Estrategia: ${J.estrategia==="informacion"?"máxima información":"patrones"}</div>
       <div class="sub">${J.propuesta.prediccion ? "🔮 Predicción sin pistas:" : J.propuesta.posiblesAntes===1 ? "Solo queda una combinación posible. ¿Es esta la correcta?" : "Propuesta del sistema:"}</div>
       <div class="balls" style="margin:8px 0">${bolasComparadas(J.propuesta.combo, "hot")}</div>
       ${textoCoinciden(J.propuesta.combo)}
@@ -1404,6 +1411,7 @@ function pintarJuego(){
 }
 
 function pintarMemoria(){
+  if(!$("avanzado").open) return;
   const M = memoria();
   $("memCount").textContent = M.length;
   $("memoria").innerHTML = M.length ? [...M].reverse().map(m=>`
@@ -1421,10 +1429,21 @@ function iniciarDesafio(){
 
   $("btnNueva").onclick = ()=>{
     const f = $("fechaDes").value;
+    const practica = !!window.__practica; window.__practica = false;
+    if(f && !practica && historial().some(h=>h.fecha===f)){
+      const jugada = memoria().filter(m=>m.fechaSorteo===f && m.resultado==="ganó").pop();
+      $("sinPistasRes").innerHTML = "";
+      $("juego").innerHTML = `<div class="card" style="background:#11141a">
+        <b style="color:var(--warn)">⚠️ El sorteo del ${fmtFecha(f)} ya está guardado.</b>
+        <div class="note" style="margin-top:4px">${jugada ? `Ya lo jugaste y lo encontró en ${jugada.intentos.length} intentos.` : "Ya estaba en el historial."} No se va a contar otra vez para no repetir datos.</div>
+        <div style="margin-top:8px"><button id="btnPractica" class="sec">Jugar de práctica (no se guarda)</button></div></div>`;
+      $("btnPractica").onclick = ()=>{ window.__practica = true; $("btnNueva").click(); };
+      return;
+    }
     if(f && f > hoyISO()){ $("juego").innerHTML = '<div class="bad">Esa fecha todavía no ha llegado: no hay sorteo real para buscar. Para esa fecha usa 🔮 Sin pistas.</div>'; return; }
     const sel = $("estrategia").value;
     const est = sel==="auto" ? estrategiaAuto().e : sel;
-    JUEGO = { estrategia: est, objetivo: $("objetivo").value.trim() || ($("fechaDes").value ? "Sorteo "+$("fechaDes").value : ""), fechaSorteo: $("fechaDes").value || null, tipo: tipoPartida($("fechaDes").value || null), intentos: [], errores: [], estado: "jugando" };
+    JUEGO = { estrategia: est, objetivo: $("objetivo").value.trim() || ($("fechaDes").value ? "Sorteo "+$("fechaDes").value : ""), fechaSorteo: $("fechaDes").value || null, tipo: tipoPartida($("fechaDes").value || null), practica, intentos: [], errores: [], estado: "jugando" };
     $("sinPistasRes").innerHTML = ""; ULTIMA_SP = null;
     $("juego").innerHTML = '<div class="note">Pensando el primer intento…</div>';
     setTimeout(()=>{ proponer(); pintarJuego(); }, 30);
@@ -1544,6 +1563,7 @@ function iniciarCalendario(){
 let PERFIL = pintar();
 iniciarDesafio();
 pintarBarraFecha();
+$("avanzado").addEventListener("toggle", ()=>{ if($("avanzado").open){ PERFIL = pintar(); pintarMemoria(); } });
 iniciarCalendario();
 
 $("btnGen").onclick = () => {
