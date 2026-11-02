@@ -1085,6 +1085,38 @@ function lecciones(m){
 
 /* ---------- Partida en curso ---------- */
 let JUEGO = null;
+/* Intentos repetidos sin pistas sobre un mismo sorteo */
+const CLAVE_REPS = "loto_repeticiones_v1";
+let REPS = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_REPS)) || {}; } catch(e){ return {}; } })();
+function guardarReps(){ try { localStorage.setItem(CLAVE_REPS, JSON.stringify(REPS)); } catch(e){} }
+function realDeFecha(f){ const R = realComp(); if(R) return R; const h = f ? historial().find(x=>x.fecha===f) : null; return h ? h.nums : null; }
+function porQueNumeros(f, c){
+  try { const { R, previos } = rangos(f); if(previos<3) return c.map(n=>({ n, txt:"azar (sin historia)" }));
+    return c.map(n=>{ const m = Object.keys(METODOS).map(k=>({k, p:R[k][n]})).sort((a,b)=>a.p-b.p)[0];
+      return { n, txt: m.p<=10 ? `${nombreCorto[m.k]} (#${m.p})` : "por la forma" }; });
+  } catch(e){ return c.map(n=>({ n, txt:"" })); }
+}
+function registrarRepeticion(f, c){
+  const real = realDeFecha(f); if(!f || !real) return;
+  const ac = c.filter(n=>real.includes(n));
+  (REPS[f] = REPS[f] || []).push({ combo: [...c], aciertos: ac.length, cuales: ac, porque: porQueNumeros(f, c).filter(x=>ac.includes(x.n)), hora: new Date().toISOString() });
+  guardarReps();
+}
+function htmlRepeticiones(f){
+  const L = REPS[f]; if(!L || !L.length) return "";
+  const dist = [0,0,0,0,0,0,0]; L.forEach(x=>dist[x.aciertos]++);
+  const mejor = Math.max(...L.map(x=>x.aciertos));
+  const prom = L.reduce((a,x)=>a+x.aciertos,0)/L.length;
+  const filas = [...L].reverse().slice(0,15).map((x,i)=>`<div class="row" style="flex-wrap:wrap"><span class="date">#${L.length-i}</span>
+      <div class="balls">${x.combo.map(n=>`<div class="ball ${x.cuales.includes(n)?'match':''}">${n}</div>`).join("")}</div>
+      <div class="score"><b class="${x.aciertos>=3?'ok':''}">${x.aciertos}/6</b></div>
+      ${x.cuales.length ? `<div class="note" style="width:100%">Acertó ${x.porque.map(p=>`${p.n} (${p.txt})`).join(", ")}</div>` : ""}</div>`).join("");
+  return `<div class="card" style="background:#11141a;margin-top:10px">
+    <div class="sub">🔁 <b>Intentos con este mismo sorteo: ${L.length}</b></div>
+    <div class="note">Mejor: <b>${mejor} de 6</b> · Promedio: ${prom.toFixed(2)} (azar 0.90) · Veces → ${dist.map((c,i)=>c?`${i}: ${c}`:null).filter(Boolean).join(" · ")}</div>
+    <div class="flex" style="margin-top:6px"><button id="btnRep10" class="small sec">🔁 Generar 10 más</button><button id="btnRepBorrar" class="small sec">🗑️ Borrar estos intentos</button></div>
+    ${filas}${L.length>15?`<div class="note">(Se muestran los últimos 15.)</div>`:""}</div>`;
+}
 /* Combinaciones sin pistas que ya generaste (la que juegas antes del sorteo) */
 const CLAVE_PREDS = "loto_predicciones_v1";
 let PREDS = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_PREDS)) || {}; } catch(e){ return {}; } })();
@@ -1754,7 +1786,7 @@ function iniciarDesafio(){
       const nueva = !!window.__otraSP; window.__otraSP = false;
       let c, yaEstaba = false;
       if(PREDS[clave] && !nueva){ c = PREDS[clave].combo; yaEstaba = true; }
-      else { c = prediccionSinPistas(P_DES(), f); PREDS[clave] = { combo: c, creada: hoyISO() }; guardarPreds(); }
+      else { c = prediccionSinPistas(P_DES(), f); PREDS[clave] = { combo: c, creada: hoyISO() }; guardarPreds(); registrarRepeticion(f, c); }
       ULTIMA_SP = { c, f };
       const n = f ? historial().filter(h=>h.fecha<f).length : historial().length;
       box.innerHTML = `<div class="sub">🔮 Combinación sin pistas ${f ? `para el ${fmtFecha(f)}${tipoPartida(f)==="envivo" ? " (sorteo nuevo)" : " (sorteo viejo)"}` : "para el próximo sorteo"}:</div>
@@ -1767,6 +1799,14 @@ function iniciarDesafio(){
         <div style="margin-top:6px"><button id="btnOtraSP" class="small sec">🔄 Generar otra</button></div>
         <div class="note">${n<3 ? "Casi no hay sorteos anteriores a esa fecha, así que esta sale al azar." : `Hecha con lo que sabe de ${n} sorteos anteriores.`}${ULTIMO_DIARIO && n>=INICIO_DIARIO ? ` Ahora le funciona mejor: ${METODOS[Object.keys(METODOS).sort((a,b)=>ULTIMO_DIARIO.ewma[b]-ULTIMO_DIARIO.ewma[a])[0]].toLowerCase()}.` : ""}</div>`;
       $("btnOtraSP").onclick = ()=>{ window.__otraSP = true; $("btnSinPistas").click(); };
+      if(f && realDeFecha(f)){
+        box.insertAdjacentHTML("beforeend", htmlRepeticiones(f) || `<div class="note" style="margin-top:6px">🔁 Toca "🔄 Generar otra" para seguir intentando con este mismo sorteo: cada intento queda guardado con sus aciertos.</div>`);
+        if($("btnRep10")) $("btnRep10").onclick = ()=>{ box.insertAdjacentHTML("beforeend",'<div class="note">Generando…</div>');
+          setTimeout(()=>{ for(let i=0;i<10;i++){ const cc = prediccionSinPistas(P_DES(), f); registrarRepeticion(f, cc); PREDS[f] = { combo: cc, creada: hoyISO() }; } guardarPreds(); $("btnSinPistas").click(); }, 30); };
+        if($("btnRepBorrar")) $("btnRepBorrar").onclick = ()=>{ delete REPS[f]; guardarReps(); $("btnSinPistas").click(); };
+      } else if(f) {
+        box.insertAdjacentHTML("beforeend", `<div class="note" style="margin-top:6px">Para guardar cuántos acierta cada intento, escribe el sorteo real arriba (o usa una fecha que ya esté guardada).</div>`);
+      }
     }, 30);
   };
 
@@ -1799,7 +1839,7 @@ function iniciarDesafio(){
         sinPistasEntrenamiento: prom(ganadas.filter(m=>m.tipo!=="envivo").map(m=>m.sinPistas)),
         sinPistasEnVivo: prom(ganadas.filter(m=>m.tipo==="envivo").map(m=>m.sinPistas))
       },
-      partidas: MEM_LOCAL, sorteosAgregados: extra
+      partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS
     };
     const txt = JSON.stringify(reporte), ta = $("repTxt");
     ta.style.display = "block"; ta.value = txt; ta.focus(); ta.select(); ta.setSelectionRange(0, txt.length);
