@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Loto Leidsa</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --txt:#e8eaf0; --sub:#9aa3b2;
+    --acc:#22c55e; --acc2:#3b82f6; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.4}
+  header{padding:18px 16px 8px}
+  h1{font-size:20px;margin:0 0 4px}
+  h2{font-size:16px;margin:0 0 10px}
+  .sub{color:var(--sub);font-size:13px}
+  main{padding:8px 12px 40px;max-width:640px;margin:auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .big{font-size:30px;font-weight:700;color:var(--acc)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:#11141a;border:1px solid var(--line);border-radius:10px;padding:8px}
+  .stat b{display:block;font-size:17px}
+  .stat span{color:var(--sub);font-size:12px}
+  .balls{display:flex;flex-wrap:wrap;gap:6px}
+  .ball{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;background:#fff;color:#111}
+  .ball.hot{background:var(--acc);color:#04210f}
+  .ball.cold{background:#3a4150;color:#e8eaf0}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .date{color:var(--sub);font-size:12px;min-width:76px}
+  .score{font-size:12px;color:var(--sub);text-align:right;min-width:60px}
+  button{background:var(--acc2);color:#fff;border:none;border-radius:10px;padding:12px 14px;font-size:15px;font-weight:600;width:100%;cursor:pointer}
+  button.sec{background:#2a2f3a}
+  button.small{width:auto;padding:6px 10px;font-size:12px}
+  input{background:#11141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;width:100%}
+  label{font-size:13px;color:var(--sub);display:block;margin:8px 0 4px}
+  .flex{display:flex;gap:8px}
+  .freq{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+  .fcell{background:#11141a;border:1px solid var(--line);border-radius:8px;text-align:center;padding:4px 0;font-size:12px}
+  .fcell b{display:block;font-size:14px}
+  .tag{display:inline-block;font-size:11px;padding:2px 6px;border-radius:6px;background:#11141a;border:1px solid var(--line);color:var(--sub);margin:2px 2px 0 0}
+  .note{font-size:12px;color:var(--sub)}
+  details summary{cursor:pointer;font-weight:600}
+  .ok{color:var(--acc)} .bad{color:#ef4444}
+  .fechaBtn{background:#11141a;border:1px solid var(--line);color:var(--txt);text-align:left;font-weight:500}
+  .picker{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:50}
+  .picker.on{display:flex}
+  .pbox{background:#2a2a2a;width:100%;max-width:520px;border-radius:22px 22px 0 0;padding:20px 16px 12px}
+  .ptitle{font-size:20px;margin:0 0 10px 8px}
+  .wheels{position:relative;display:flex;justify-content:center;gap:10px;height:180px}
+  .wheel{height:180px;overflow-y:scroll;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;text-align:center}
+  .wheel::-webkit-scrollbar{display:none}
+  .wheel div{height:60px;line-height:60px;scroll-snap-align:center;font-size:22px;color:#777;transition:color .15s,font-size .15s}
+  .wheel div.sel{color:#fff;font-size:26px}
+  .wheel .pad{pointer-events:none}
+  .wd{width:60px}.wm{width:150px}.wy{width:90px}
+  .marca{position:absolute;left:12%;right:12%;top:60px;height:60px;border-top:2px solid #ddd;border-bottom:2px solid #ddd;pointer-events:none}
+  .pbtns{display:flex;margin-top:12px}
+  .pbtns button{background:none;font-size:18px;color:#fff}
+  .ball.match{box-shadow:0 0 0 3px #facc15}
+  .coinc{font-size:13px;margin-top:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎱 Loto Leidsa</h1>
+  
+</header>
+<main>
+
+  <!-- PANTALLA SIMPLE -->
+  <div class="note" id="barraFecha" style="margin:0 4px 8px"></div>
+  <section class="card" style="border-color:var(--warn)">
+    <label for="fechaDes" style="margin-top:0">Fecha del sorteo</label>
+    <input id="fechaDes" type="hidden">
+    <button id="fechaBtn" class="fechaBtn">📅 Elegir fecha</button>
+    <label for="realComp">Sorteo real (solo para que tú compares; el sistema no lo ve ni se guarda)</label>
+    <input id="realComp" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej: 11,15,16,20,29,31">
+    <div class="flex" style="margin-top:12px">
+      <button id="btnNueva">🎯 Con pistas</button>
+      <button id="btnSinPistas" style="background:var(--acc);color:#04210f">🔮 Sin pistas</button>
+    </div>
+    <div id="sinPistasRes" style="margin-top:10px"></div>
+    <div id="juego" style="margin-top:10px"></div>
+  </section>
+
+  <!-- Calendario de rueda -->
+  <div class="picker" id="picker">
+    <div class="pbox">
+      <div class="ptitle">Seleccionar fecha</div>
+      <div class="wheels">
+        <div class="wheel wd" id="wDia"></div>
+        <div class="wheel wm" id="wMes"></div>
+        <div class="wheel wy" id="wAno"></div>
+        <div class="marca"></div>
+      </div>
+      <div class="pbtns">
+        <button id="pCancel">Cancelar</button>
+        <button id="pBorrar" style="color:#aaa">Sin fecha</button>
+        <button id="pOk" style="font-weight:700">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TODO LO DEMÁS, ESCONDIDO -->
+  <details id="avanzado">
+    <summary class="sub" style="padding:10px 4px">⚙️ Ver más opciones</summary>
+
+  <section class="card">
+    <h2>Opciones de la partida</h2>
+    <div class="note">Límite de <b id="limiteTxt"></b> intentos. El intento 1 es su predicción sin pistas, hecha solo con los sorteos anteriores a esa fecha.</div>
+    <div id="aprendizaje" class="note" style="margin-top:8px"></div>
+    <label for="objetivo">Nombre de la combinación (opcional, sin los números)</label>
+    <input id="objetivo" type="text" placeholder="Ej: Sorteo del miércoles">
+    <label for="estrategia">Estrategia</label>
+    <select id="estrategia" style="background:#11141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:15px;width:100%">
+      <option value="auto">Automática (la que mejor le ha funcionado)</option>
+      <option value="informacion">Máxima información (descarta lo más posible)</option>
+      <option value="patrones">Patrones del historial (la que usó el 28-08-2024)</option>
+    </select>
+  </section>
+
+
+  <!-- 1. Combinaciones totales -->
+  <section class="card">
+    <h2>Combinaciones posibles</h2>
+    <div class="big" id="totalComb">—</div>
+    <div class="sub">Fórmula: C(40, 6) = 40! ÷ (6! × 34!)</div>
+  </section>
+
+  <!-- 2. Patrones aprendidos -->
+  <section class="card">
+    <h2>Lo que aprendió del historial</h2>
+    <div class="sub" id="histInfo"></div>
+    <div class="grid" style="margin-top:10px" id="patterns"></div>
+  </section>
+
+  <!-- 2b. Comparación entre grupos de fechas -->
+  <section class="card">
+    <h2>¿Qué tan parecidos son los grupos de fechas?</h2>
+    <div class="sub" style="margin-bottom:8px">Archivo (ene 2024 – may 2026) vs. Supabase (jul – oct 2026)</div>
+    <div id="comparacion"></div>
+  </section>
+
+  <!-- 2c-bis. Memoria -->
+  <section class="card">
+    <details>
+      <summary>🧠 Memoria del sistema (<span id="memCount">0</span> partidas)</summary>
+      <div id="memoria" style="margin-top:8px"></div>
+      <div class="flex" style="margin-top:8px">
+        <button class="sec" id="btnCopiarMem">📋 Copiar memoria</button>
+        <button class="sec" id="btnBajarMem">⬇️ Descargar</button>
+      </div>
+      <div id="memMsg" class="note" style="margin-top:6px"></div>
+      <textarea id="memTxt" readonly style="display:none;width:100%;height:140px;margin-top:6px;background:#11141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px"></textarea>
+    </details>
+  </section>
+
+  <!-- 2d. Comparar dos combinaciones -->
+  <section class="card">
+    <h2>Comparar dos combinaciones</h2>
+    <label for="cmpA">Combinación A</label>
+    <input id="cmpA" type="text" inputmode="decimal" placeholder="Ej: 2,10,15,22,34,40">
+    <label for="cmpB">Combinación B</label>
+    <input id="cmpB" type="text" inputmode="decimal" placeholder="Ej: 3,10,12,21,26,39">
+    <div style="margin-top:10px"><button id="btnCmp" class="sec">Comparar</button></div>
+    <div id="cmpRes" style="margin-top:8px"></div>
+  </section>
+
+  <!-- 3. Generador -->
+  <section class="card">
+    <h2>Generar combinación</h2>
+    <button id="btnGen">Generar 1 combinación</button>
+    <label><input type="checkbox" id="usarFrecuencia" checked style="width:auto"> Dar más peso a los números que más salen</label>
+    <div id="generadas" style="margin-top:10px"></div>
+  </section>
+
+  <!-- 4. Frecuencia -->
+  <section class="card">
+    <h2>Veces que ha salido cada número</h2>
+    <div class="sub" style="margin-bottom:8px"><span class="tag" style="background:var(--acc);color:#04210f">Más salen</span> <span class="tag" style="background:#3a4150;color:#fff">Menos salen</span></div>
+    <div class="freq" id="freq"></div>
+  </section>
+
+  <!-- 5. Agregar sorteo -->
+  <section class="card">
+    <h2>Agregar un sorteo nuevo</h2>
+    <label for="nuevaFecha">Fecha</label>
+    <input id="nuevaFecha" type="date">
+    <label for="nuevosNums">6 números separados por coma</label>
+    <input id="nuevosNums" type="text" inputmode="decimal" placeholder="Ej: 3,10,12,21,26,39">
+    <div style="margin-top:10px"><button id="btnAdd" class="sec">Agregar al historial</button></div>
+    <div id="addMsg" class="note" style="margin-top:6px"></div>
+  </section>
+
+  <!-- 6. Historial -->
+  <section class="card">
+    <details>
+      <summary>Historial de sorteos (<span id="histCount">0</span>)</summary>
+      <div id="historial" style="margin-top:8px"></div>
+    </details>
+  </section>
+
+  <p class="note">Cada combinación tiene exactamente la misma probabilidad de salir: 1 entre 3,838,380. Este generador copia la "forma" de los sorteos pasados (suma, pares, altos y bajos), pero no puede predecir el próximo resultado. Juega con responsabilidad.</p>
+
+  </details>
+</main>
+
+<script>
+/* =========================================================
+   HISTORIAL BASE — Loto Leidsa (6 números principales)
+   Copiado de Supabase (tabla "sorteos", Leidsa · Loto Leidsa).
+   Los números Más / Súper Más no se incluyen.
+   ========================================================= */
+const HISTORIAL_BASE = [
+  { fecha: "2026-07-26", nums: [3,10,12,21,26,39] },
+  { fecha: "2026-07-29", nums: [2,12,16,25,33,35] },
+  { fecha: "2026-08-01", nums: [7,14,16,21,27,29] },
+  { fecha: "2026-08-05", nums: [9,10,24,32,35,37] },
+  { fecha: "2026-08-08", nums: [2,9,15,26,29,31] },
+  { fecha: "2026-08-12", nums: [26,32,35,37,38,39] },
+  { fecha: "2026-08-15", nums: [4,6,10,15,23,24] },
+  { fecha: "2026-08-19", nums: [5,10,14,19,23,30] },
+  { fecha: "2026-08-22", nums: [11,14,17,19,28,40] },
+  { fecha: "2026-08-26", nums: [1,5,12,16,25,27] },
+  { fecha: "2026-08-29", nums: [10,11,17,24,25,31] },
+  { fecha: "2026-09-02", nums: [2,11,14,19,28,38] },
+  { fecha: "2026-09-05", nums: [1,3,6,20,34,35] },
+  { fecha: "2026-09-09", nums: [3,4,18,20,22,31] },
+  { fecha: "2026-09-12", nums: [5,8,9,21,24,28] },
+  { fecha: "2026-09-16", nums: [4,8,13,17,19,32] },
+  { fecha: "2026-09-19", nums: [5,13,22,36,37,38] },
+  { fecha: "2026-09-23", nums: [6,10,14,17,22,32] },
+  { fecha: "2026-09-26", nums: [11,26,27,31,33,39] },
+  { fecha: "2026-09-30", nums: [4,6,10,31,33,38] },
+  { fecha: "2026-10-03", nums: [4,12,14,17,27,37] },
+  { fecha: "2026-10-07", nums: [9,22,25,34,36,39] },
+  { fecha: "2026-10-10", nums: [12,20,22,26,30,40] },
+  { fecha: "2026-10-14", nums: [11,25,29,35,36,40] },
+  { fecha: "2026-10-17", nums: [5,7,9,26,32,38] },
+  { fecha: "2026-10-21", nums: [9,10,17,24,29,30] },
+  { fecha: "2026-10-24", nums: [10,18,27,29,35,39] },
+  { fecha: "2026-10-28", nums: [13,17,18,20,28,37] },
+  { fecha: "2026-10-31", nums: [8,11,13,14,23,38] }
+];
+
+/* =========================================================
+   HISTORIAL DEL ARCHIVO — Loto Leidsa (6 números principales)
+   245 sorteos, del 03-01-2024 al 27-05-2026 (archivo del usuario).
+   El 28-08-2024 se reconstruyó con pistas el 02-11-2026 y se volvió a poner.
+   ========================================================= */
+const HISTORIAL_ARCHIVO = [
+  { fecha: "2020-10-31", nums: [16,26,27,28,37,38] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-28", nums: [3,9,10,25,28,33] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-09-23", nums: [2,19,26,28,30,32] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-09-26", nums: [4,5,11,21,31,34] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-03", nums: [17,18,26,27,34,36] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-07", nums: [3,5,10,26,28,29] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-10", nums: [7,12,15,17,18,31] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-14", nums: [2,7,16,26,28,34] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-17", nums: [2,5,11,12,31,34] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-21", nums: [15,20,23,28,30,34] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-10-24", nums: [4,8,21,26,28,30] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-09-30", nums: [11,15,16,20,29,31] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2024-01-03", nums: [11,24,27,31,33,38] },
+  { fecha: "2024-01-06", nums: [1,2,12,15,29,38] },
+  { fecha: "2024-01-10", nums: [8,14,15,20,32,33] },
+  { fecha: "2024-01-13", nums: [18,22,24,26,28,33] },
+  { fecha: "2024-01-17", nums: [13,16,27,29,32,34] },
+  { fecha: "2024-01-20", nums: [7,15,17,26,28,35] },
+  { fecha: "2024-01-24", nums: [1,6,19,22,26,31] },
+  { fecha: "2024-01-27", nums: [9,11,12,20,29,33] },
+  { fecha: "2024-01-31", nums: [20,22,24,30,33,38] },
+  { fecha: "2024-02-03", nums: [1,7,9,23,28,37] },
+  { fecha: "2024-02-07", nums: [7,11,24,25,28,38] },
+  { fecha: "2024-02-10", nums: [5,12,14,17,30,40] },
+  { fecha: "2024-02-14", nums: [9,11,15,22,27,39] },
+  { fecha: "2024-02-17", nums: [3,14,15,17,18,37] },
+  { fecha: "2024-02-21", nums: [7,13,20,28,30,33] },
+  { fecha: "2024-02-24", nums: [2,10,15,18,31,39] },
+  { fecha: "2024-02-28", nums: [7,8,15,17,25,30] },
+  { fecha: "2024-03-02", nums: [6,9,14,17,36,37] },
+  { fecha: "2024-03-06", nums: [22,24,29,33,36,38] },
+  { fecha: "2024-03-09", nums: [5,7,18,33,38,40] },
+  { fecha: "2024-03-13", nums: [8,14,22,26,35,40] },
+  { fecha: "2024-03-16", nums: [10,11,12,15,32,37] },
+  { fecha: "2024-03-20", nums: [4,15,17,19,25,33] },
+  { fecha: "2024-03-23", nums: [7,10,13,18,20,39] },
+  { fecha: "2024-03-27", nums: [6,17,24,32,34,40] },
+  { fecha: "2024-03-30", nums: [11,19,31,37,38,40] },
+  { fecha: "2024-04-03", nums: [1,6,7,15,25,28] },
+  { fecha: "2024-04-06", nums: [3,9,14,23,25,27] },
+  { fecha: "2024-04-10", nums: [2,8,11,19,23,29] },
+  { fecha: "2024-04-13", nums: [3,7,9,12,15,28] },
+  { fecha: "2024-04-17", nums: [1,15,17,23,34,39] },
+  { fecha: "2024-04-20", nums: [2,6,7,15,21,29] },
+  { fecha: "2024-04-24", nums: [6,8,9,17,30,38] },
+  { fecha: "2024-04-27", nums: [2,8,11,13,20,24] },
+  { fecha: "2024-05-01", nums: [12,18,19,20,37,40] },
+  { fecha: "2024-05-04", nums: [5,12,22,23,27,31] },
+  { fecha: "2024-05-08", nums: [11,12,28,29,35,40] },
+  { fecha: "2024-05-11", nums: [2,3,27,29,33,37] },
+  { fecha: "2024-05-15", nums: [1,2,18,20,21,28] },
+  { fecha: "2024-05-18", nums: [5,9,13,15,18,22] },
+  { fecha: "2024-05-22", nums: [1,4,9,21,25,26] },
+  { fecha: "2024-05-25", nums: [5,10,12,15,29,38] },
+  { fecha: "2024-05-29", nums: [3,18,21,22,28,40] },
+  { fecha: "2024-06-01", nums: [5,7,17,27,29,40] },
+  { fecha: "2024-06-05", nums: [8,19,20,27,29,36] },
+  { fecha: "2024-06-08", nums: [5,6,7,8,30,33] },
+  { fecha: "2024-06-12", nums: [1,6,11,22,32,39] },
+  { fecha: "2024-06-15", nums: [3,6,12,14,18,27] },
+  { fecha: "2024-06-19", nums: [2,14,22,33,35,39] },
+  { fecha: "2024-06-22", nums: [6,16,25,26,27,33] },
+  { fecha: "2024-06-26", nums: [2,3,4,12,23,30] },
+  { fecha: "2024-06-29", nums: [6,8,13,25,35,39] },
+  { fecha: "2024-07-03", nums: [1,3,11,20,28,31] },
+  { fecha: "2024-07-06", nums: [12,17,19,23,34,35] },
+  { fecha: "2024-07-10", nums: [3,5,7,21,29,30] },
+  { fecha: "2024-07-13", nums: [13,16,29,31,32,33] },
+  { fecha: "2024-07-17", nums: [6,9,10,11,32,39] },
+  { fecha: "2024-07-20", nums: [7,14,19,23,36,37] },
+  { fecha: "2024-07-24", nums: [10,15,18,24,31,34] },
+  { fecha: "2024-07-27", nums: [1,7,13,15,21,29] },
+  { fecha: "2024-07-31", nums: [1,8,12,19,20,22] },
+  { fecha: "2024-08-03", nums: [6,14,20,24,25,34] },
+  { fecha: "2024-08-07", nums: [1,4,15,18,24,37] },
+  { fecha: "2024-08-10", nums: [7,10,18,19,20,28] },
+  { fecha: "2024-08-14", nums: [6,23,24,25,30,38] },
+  { fecha: "2024-08-17", nums: [7,14,15,19,27,35] },
+  { fecha: "2024-08-21", nums: [6,7,25,31,32,33] },
+  { fecha: "2024-08-24", nums: [3,9,11,18,34,35] },
+  { fecha: "2024-08-28", nums: [7,13,25,26,31,40] },
+  { fecha: "2024-08-31", nums: [4,20,22,23,36,37] },
+  { fecha: "2024-09-04", nums: [4,10,13,21,25,33] },
+  { fecha: "2024-09-07", nums: [2,3,7,8,9,34] },
+  { fecha: "2024-09-11", nums: [13,20,25,33,36,39] },
+  { fecha: "2024-09-14", nums: [9,10,14,21,22,30] },
+  { fecha: "2024-09-18", nums: [1,2,5,14,25,37] },
+  { fecha: "2024-09-21", nums: [1,3,11,12,28,30] },
+  { fecha: "2024-09-25", nums: [1,5,17,24,31,33] },
+  { fecha: "2024-09-28", nums: [4,21,25,27,36,39] },
+  { fecha: "2024-10-02", nums: [7,9,19,20,31,35] },
+  { fecha: "2024-10-05", nums: [2,13,14,27,32,33] },
+  { fecha: "2024-10-09", nums: [3,11,16,19,35,36] },
+  { fecha: "2024-10-12", nums: [9,15,20,22,37,39] },
+  { fecha: "2024-10-16", nums: [8,23,25,29,32,38] },
+  { fecha: "2024-10-19", nums: [5,20,23,24,33,38] },
+  { fecha: "2024-10-23", nums: [10,11,20,22,31,36] },
+  { fecha: "2024-10-26", nums: [1,7,20,23,26,40] },
+  { fecha: "2024-10-30", nums: [3,6,13,19,23,34] },
+  { fecha: "2024-11-02", nums: [5,10,23,25,33,38] },
+  { fecha: "2024-11-06", nums: [13,22,24,33,36,38] },
+  { fecha: "2024-11-09", nums: [3,19,20,25,28,37] },
+  { fecha: "2024-11-13", nums: [12,23,31,35,37,39] },
+  { fecha: "2024-11-16", nums: [3,23,32,33,35,39] },
+  { fecha: "2024-11-20", nums: [22,24,25,29,32,37] },
+  { fecha: "2024-11-23", nums: [3,9,13,21,22,23] },
+  { fecha: "2024-11-27", nums: [13,23,24,32,33,34] },
+  { fecha: "2024-11-30", nums: [16,17,24,31,35,38] },
+  { fecha: "2024-12-04", nums: [1,8,10,27,35,39] },
+  { fecha: "2024-12-07", nums: [2,6,8,13,24,37] },
+  { fecha: "2024-12-11", nums: [7,17,18,22,24,35] },
+  { fecha: "2024-12-14", nums: [19,20,22,26,27,32] },
+  { fecha: "2024-12-18", nums: [8,11,19,25,26,38] },
+  { fecha: "2024-12-21", nums: [7,14,16,17,32,36] },
+  { fecha: "2024-12-28", nums: [3,4,10,11,22,37] },
+  { fecha: "2025-01-04", nums: [1,8,10,16,22,37] },
+  { fecha: "2025-01-08", nums: [3,9,15,17,36,38] },
+  { fecha: "2025-01-11", nums: [3,27,31,34,35,40] },
+  { fecha: "2025-01-15", nums: [6,7,12,13,32,36] },
+  { fecha: "2025-01-18", nums: [10,12,15,16,26,31] },
+  { fecha: "2025-01-22", nums: [6,10,16,27,30,35] },
+  { fecha: "2025-01-25", nums: [3,23,32,38,39,40] },
+  { fecha: "2025-01-29", nums: [1,3,6,8,22,36] },
+  { fecha: "2025-02-01", nums: [2,10,14,20,32,39] },
+  { fecha: "2025-02-05", nums: [3,5,14,23,25,36] },
+  { fecha: "2025-02-08", nums: [1,3,4,5,9,29] },
+  { fecha: "2025-02-12", nums: [2,3,4,20,22,25] },
+  { fecha: "2025-02-15", nums: [6,7,16,17,34,36] },
+  { fecha: "2025-02-19", nums: [7,12,22,30,32,34] },
+  { fecha: "2025-02-22", nums: [5,8,16,25,30,37] },
+  { fecha: "2025-02-26", nums: [1,3,5,22,30,35] },
+  { fecha: "2025-03-01", nums: [9,15,17,20,24,29] },
+  { fecha: "2025-03-05", nums: [2,13,16,17,18,19] },
+  { fecha: "2025-03-08", nums: [18,19,23,26,28,40] },
+  { fecha: "2025-03-12", nums: [1,2,5,21,28,38] },
+  { fecha: "2025-03-15", nums: [13,15,25,28,35,39] },
+  { fecha: "2025-03-19", nums: [1,2,16,20,26,35] },
+  { fecha: "2025-03-22", nums: [2,21,24,28,35,40] },
+  { fecha: "2025-03-26", nums: [2,10,13,15,24,36] },
+  { fecha: "2025-03-29", nums: [10,17,19,22,36,39] },
+  { fecha: "2025-04-02", nums: [13,16,18,23,29,38] },
+  { fecha: "2025-04-05", nums: [2,6,12,13,30,39] },
+  { fecha: "2025-04-09", nums: [4,11,12,17,27,38] },
+  { fecha: "2025-04-12", nums: [1,9,20,23,26,38] },
+  { fecha: "2025-04-16", nums: [11,16,17,18,20,31] },
+  { fecha: "2025-04-19", nums: [5,12,13,15,21,30] },
+  { fecha: "2025-04-23", nums: [3,6,9,11,32,34] },
+  { fecha: "2025-04-26", nums: [2,4,5,8,27,30] },
+  { fecha: "2025-04-30", nums: [10,14,18,28,37,38] },
+  { fecha: "2025-05-03", nums: [1,21,22,26,27,36] },
+  { fecha: "2025-05-07", nums: [5,18,19,22,27,32] },
+  { fecha: "2025-05-10", nums: [6,7,10,11,19,38] },
+  { fecha: "2025-05-14", nums: [3,5,20,22,24,40] },
+  { fecha: "2025-05-17", nums: [5,8,13,16,29,40] },
+  { fecha: "2025-05-21", nums: [1,7,9,13,30,33] },
+  { fecha: "2025-05-24", nums: [8,11,17,21,31,32] },
+  { fecha: "2025-05-28", nums: [1,6,8,23,26,32] },
+  { fecha: "2025-05-31", nums: [11,16,19,20,24,26] },
+  { fecha: "2025-06-04", nums: [6,9,13,20,24,40] },
+  { fecha: "2025-06-07", nums: [6,16,27,28,30,36] },
+  { fecha: "2025-06-11", nums: [12,16,21,22,31,37] },
+  { fecha: "2025-06-14", nums: [3,4,14,19,22,32] },
+  { fecha: "2025-06-18", nums: [16,30,31,32,35,36] },
+  { fecha: "2025-06-21", nums: [4,6,7,16,30,34] },
+  { fecha: "2025-06-25", nums: [12,14,15,27,30,36] },
+  { fecha: "2025-06-28", nums: [4,12,16,21,30,31] },
+  { fecha: "2025-07-02", nums: [3,7,16,18,19,31] },
+  { fecha: "2025-07-05", nums: [10,15,21,23,30,35] },
+  { fecha: "2025-07-09", nums: [1,2,11,12,30,36] },
+  { fecha: "2025-07-12", nums: [7,16,25,27,35,40] },
+  { fecha: "2025-07-16", nums: [2,6,15,26,34,35] },
+  { fecha: "2025-07-19", nums: [4,14,22,25,30,39] },
+  { fecha: "2025-07-23", nums: [14,20,32,33,35,38] },
+  { fecha: "2025-07-26", nums: [1,4,19,26,31,35] },
+  { fecha: "2025-07-30", nums: [3,16,22,23,25,31] },
+  { fecha: "2025-08-02", nums: [7,10,15,21,22,29] },
+  { fecha: "2025-08-06", nums: [14,17,18,20,38,40] },
+  { fecha: "2025-08-09", nums: [4,5,9,33,38,40] },
+  { fecha: "2025-08-13", nums: [7,11,22,26,29,40] },
+  { fecha: "2025-08-16", nums: [2,8,18,19,24,34] },
+  { fecha: "2025-08-20", nums: [2,17,18,24,26,38] },
+  { fecha: "2025-08-23", nums: [5,21,30,35,37,39] },
+  { fecha: "2025-08-27", nums: [3,6,24,28,38,39] },
+  { fecha: "2025-08-30", nums: [3,6,9,23,32,40] },
+  { fecha: "2025-09-03", nums: [3,8,14,17,32,35] },
+  { fecha: "2025-09-06", nums: [14,19,28,30,31,40] },
+  { fecha: "2025-09-10", nums: [2,8,9,19,21,27] },
+  { fecha: "2025-09-13", nums: [6,14,20,21,33,35] },
+  { fecha: "2025-09-17", nums: [1,23,26,29,35,36] },
+  { fecha: "2025-09-20", nums: [3,10,11,12,13,25] },
+  { fecha: "2025-09-24", nums: [3,9,25,30,31,38] },
+  { fecha: "2025-09-27", nums: [2,9,10,14,27,32] },
+  { fecha: "2025-10-01", nums: [3,13,16,27,34,38] },
+  { fecha: "2025-10-04", nums: [2,12,18,22,36,40] },
+  { fecha: "2025-10-08", nums: [12,19,24,28,34,36] },
+  { fecha: "2025-10-11", nums: [2,4,9,27,35,40] },
+  { fecha: "2025-10-15", nums: [6,14,24,31,35,36] },
+  { fecha: "2025-10-18", nums: [7,14,17,18,23,36] },
+  { fecha: "2025-10-29", nums: [2,3,11,25,29,32] },
+  { fecha: "2025-11-01", nums: [5,6,9,13,16,39] },
+  { fecha: "2025-11-05", nums: [19,23,27,31,36,38] },
+  { fecha: "2025-11-08", nums: [2,3,8,13,22,27] },
+  { fecha: "2025-11-12", nums: [1,2,6,11,15,31] },
+  { fecha: "2025-11-15", nums: [12,14,20,22,28,31] },
+  { fecha: "2025-11-19", nums: [13,18,19,23,31,37] },
+  { fecha: "2025-11-22", nums: [7,10,12,18,21,26] },
+  { fecha: "2025-11-26", nums: [1,5,10,11,28,35] },
+  { fecha: "2025-11-29", nums: [3,4,21,25,26,27] },
+  { fecha: "2025-12-03", nums: [5,8,19,21,26,32] },
+  { fecha: "2025-12-06", nums: [3,7,17,33,37,39] },
+  { fecha: "2025-12-10", nums: [4,12,13,23,24,38] },
+  { fecha: "2025-12-13", nums: [9,10,23,24,31,33] },
+  { fecha: "2025-12-17", nums: [1,2,15,29,34,40] },
+  { fecha: "2025-12-20", nums: [9,20,28,31,35,40] },
+  { fecha: "2025-12-27", nums: [2,10,13,15,22,30] },
+  { fecha: "2026-01-03", nums: [22,24,28,35,39,40] },
+  { fecha: "2026-01-07", nums: [7,12,13,19,28,29] },
+  { fecha: "2026-01-10", nums: [2,3,14,17,24,35] },
+  { fecha: "2026-01-14", nums: [4,11,19,22,31,39] },
+  { fecha: "2026-01-17", nums: [4,13,15,23,26,29] },
+  { fecha: "2026-01-21", nums: [1,3,6,9,25,37] },
+  { fecha: "2026-01-24", nums: [1,8,11,20,22,38] },
+  { fecha: "2026-01-28", nums: [1,7,8,15,35,40] },
+  { fecha: "2026-01-31", nums: [4,9,10,18,32,38] },
+  { fecha: "2026-02-04", nums: [2,3,4,6,20,37] },
+  { fecha: "2026-02-07", nums: [14,22,27,38,39,40] },
+  { fecha: "2026-02-11", nums: [4,7,8,16,21,30] },
+  { fecha: "2026-02-14", nums: [10,20,25,29,32,37] },
+  { fecha: "2026-02-18", nums: [10,14,26,29,32,36] },
+  { fecha: "2026-02-21", nums: [8,10,14,17,25,36] },
+  { fecha: "2026-02-25", nums: [1,7,10,15,33,35] },
+  { fecha: "2026-02-28", nums: [17,20,28,30,36,39] },
+  { fecha: "2026-03-04", nums: [3,4,19,21,22,29] },
+  { fecha: "2026-03-07", nums: [7,10,12,34,38,39] },
+  { fecha: "2026-03-11", nums: [1,4,13,26,37,40] },
+  { fecha: "2026-03-14", nums: [2,7,16,24,32,39] },
+  { fecha: "2026-03-18", nums: [2,12,15,21,23,28] },
+  { fecha: "2026-03-21", nums: [7,8,16,17,21,39] },
+  { fecha: "2026-03-25", nums: [10,14,15,20,22,35] },
+  { fecha: "2026-03-28", nums: [9,10,19,27,30,32] },
+  { fecha: "2026-04-01", nums: [11,13,15,21,30,40] },
+  { fecha: "2026-04-04", nums: [13,20,22,30,32,35] },
+  { fecha: "2026-04-08", nums: [2,14,28,29,31,33] },
+  { fecha: "2026-04-11", nums: [2,5,11,31,34,39] },
+  { fecha: "2026-04-15", nums: [11,15,17,23,29,35] },
+  { fecha: "2026-04-18", nums: [2,7,14,24,32,35] },
+  { fecha: "2026-04-22", nums: [2,6,9,21,22,24] },
+  { fecha: "2026-04-25", nums: [1,13,14,15,25,30] },
+  { fecha: "2026-04-29", nums: [2,9,12,15,26,32] },
+  { fecha: "2026-05-02", nums: [6,13,17,21,29,35] },
+  { fecha: "2026-05-06", nums: [2,3,8,10,13,19] },
+  { fecha: "2026-05-09", nums: [1,4,27,28,30,36] },
+  { fecha: "2026-05-13", nums: [4,10,25,26,33,34] },
+  { fecha: "2026-05-16", nums: [3,14,18,20,29,32] },
+  { fecha: "2026-05-20", nums: [1,10,14,22,30,33] },
+  { fecha: "2026-05-23", nums: [2,5,10,29,30,38] },
+  { fecha: "2026-05-27", nums: [2,10,15,22,34,40] }
+];
+
+const MIN = 1, MAX = 40, K = 6;
+const CLAVE_LOCAL = "loto_leidsa_extra";
+
+/* ---------- Guardado local (sorteos que agregues desde el celular) ---------- */
+function cargarExtra(){
+  try { return JSON.parse(localStorage.getItem(CLAVE_LOCAL)) || []; } catch(e){ return []; }
+}
+function guardarExtra(lista){
+  try { localStorage.setItem(CLAVE_LOCAL, JSON.stringify(lista)); } catch(e){}
+}
+let extra = cargarExtra();
+function historial(){
+  const porFecha = new Map();
+  [...HISTORIAL_ARCHIVO, ...HISTORIAL_BASE, ...extra].forEach(h=>{ if(!porFecha.has(h.fecha)) porFecha.set(h.fecha, h); });
+  return [...porFecha.values()].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+}
+
+/* ---------- Matemática ---------- */
+function combinaciones(n,k){
+  let r = 1;
+  for(let i=1;i<=k;i++){ r = r*(n-k+i)/i; }
+  return Math.round(r);
+}
+const fmt = n => n.toLocaleString("es-DO");
+
+/* ---------- Rasgos de una combinación ---------- */
+function rasgos(nums){
+  const s = [...nums].sort((a,b)=>a-b);
+  const suma = s.reduce((a,b)=>a+b,0);
+  const pares = s.filter(n=>n%2===0).length;
+  const bajos = s.filter(n=>n<=20).length;
+  let consecutivos = 0;
+  for(let i=1;i<s.length;i++) if(s[i]-s[i-1]===1) consecutivos++;
+  const rango = s[s.length-1]-s[0];
+  const decenas = new Set(s.map(n=>Math.min(3,Math.floor((n-1)/10)))).size;
+  return { suma, pares, bajos, consecutivos, rango, decenas };
+}
+
+/* ---------- Aprender el perfil del historial ---------- */
+function percentil(arr,p){
+  const s=[...arr].sort((a,b)=>a-b);
+  const i=(s.length-1)*p, lo=Math.floor(i), hi=Math.ceil(i);
+  return s[lo]+(s[hi]-s[lo])*(i-lo);
+}
+function conteo(arr){
+  const c={}; arr.forEach(v=>c[v]=(c[v]||0)+1); return c;
+}
+function aprender(hist){
+  const R = hist.map(h=>rasgos(h.nums));
+  const sumas = R.map(r=>r.suma), rangos = R.map(r=>r.rango);
+  const freq = Array(MAX+1).fill(0);
+  hist.forEach(h=>h.nums.forEach(n=>freq[n]++));
+  return {
+    total: hist.length,
+    sumaMin: Math.min(...sumas), sumaMax: Math.max(...sumas),
+    sumaP20: percentil(sumas,0.2), sumaP80: percentil(sumas,0.8),
+    sumaProm: sumas.reduce((a,b)=>a+b,0)/sumas.length,
+    rangoP20: percentil(rangos,0.2), rangoP80: percentil(rangos,0.8),
+    pares: conteo(R.map(r=>r.pares)),
+    bajos: conteo(R.map(r=>r.bajos)),
+    consec: conteo(R.map(r=>r.consecutivos)),
+    decenas: conteo(R.map(r=>r.decenas)),
+    freq,
+    vistas: new Set(hist.map(h=>[...h.nums].sort((a,b)=>a-b).join("-")))
+  };
+}
+
+/* ---------- Qué tanto se parece una combinación al historial (0 a 100) ---------- */
+function parecido(nums, P){
+  const r = rasgos(nums);
+  let pts = 0;
+  // Suma: dentro del 60% central vale más
+  if(r.suma>=P.sumaP20 && r.suma<=P.sumaP80) pts+=30;
+  else if(r.suma>=P.sumaMin && r.suma<=P.sumaMax) pts+=15;
+  // Rango (distancia entre el menor y el mayor)
+  if(r.rango>=P.rangoP20 && r.rango<=P.rangoP80) pts+=15; else pts+=5;
+  // Pares, bajos, consecutivos y decenas: según qué tan seguido se vieron
+  const prop = (mapa,v)=> (mapa[v]||0)/P.total;
+  const maxProp = mapa => Math.max(...Object.values(mapa))/P.total;
+  pts += 20 * prop(P.pares,r.pares)/maxProp(P.pares);
+  pts += 15 * prop(P.bajos,r.bajos)/maxProp(P.bajos);
+  pts += 10 * prop(P.consec,r.consecutivos)/maxProp(P.consec);
+  pts += 10 * prop(P.decenas,r.decenas)/maxProp(P.decenas);
+  return Math.round(pts);
+}
+
+/* ---------- Generador ---------- */
+function sorteoAleatorio(P, conPeso){
+  const pool = [];
+  for(let n=MIN;n<=MAX;n++){
+    const peso = conPeso ? 1 + P.freq[n] : 1;
+    pool.push({n, peso});
+  }
+  const elegidos = [];
+  while(elegidos.length<K){
+    const tot = pool.reduce((a,b)=>a+b.peso,0);
+    let x = Math.random()*tot;
+    for(let i=0;i<pool.length;i++){
+      x -= pool[i].peso;
+      if(x<=0){ elegidos.push(pool[i].n); pool.splice(i,1); break; }
+    }
+  }
+  return elegidos.sort((a,b)=>a-b);
+}
+function generar(cantidad, P, conPeso){
+  const resultado = [], usadas = new Set();
+  let intentos = 0;
+  while(resultado.length<cantidad && intentos<200000){
+    intentos++;
+    const c = sorteoAleatorio(P, conPeso);
+    const clave = c.join("-");
+    if(P.vistas.has(clave) || usadas.has(clave)) continue;   // nunca repetir una que ya salió
+    const sc = parecido(c,P);
+    const umbral = intentos<50000 ? 80 : 65;                  // exigente primero, luego afloja
+    if(sc>=umbral){ usadas.add(clave); resultado.push({c, sc}); }
+  }
+  return resultado.sort((a,b)=>b.sc-a.sc);
+}
+
+/* ---------- Pantalla ---------- */
+const $ = id => document.getElementById(id);
+const bolas = (nums, P) => {
+  if(!P) return nums.map(n=>`<div class="ball">${n}</div>`).join("");
+  const orden = [...P.freq.keys()].slice(1).sort((a,b)=>P.freq[b]-P.freq[a]);
+  const top = new Set(orden.slice(0,8)), low = new Set(orden.slice(-8));
+  return nums.map(n=>`<div class="ball ${top.has(n)?'hot':low.has(n)?'cold':''}">${n}</div>`).join("");
+};
+const modo = mapa => Object.entries(mapa).sort((a,b)=>b[1]-a[1])[0][0];
+
+function pintar(){
+  const H = historial(), P = aprender(H);
+  $("totalComb").textContent = fmt(combinaciones(MAX,K));
+  $("histInfo").textContent = `${P.total} sorteos analizados (${H[0].fecha} al ${H[H.length-1].fecha})`;
+  $("patterns").innerHTML = `
+    <div class="stat"><b>${Math.round(P.sumaP20)} – ${Math.round(P.sumaP80)}</b><span>Suma típica de los 6 números</span></div>
+    <div class="stat"><b>${Math.round(P.sumaProm)}</b><span>Suma promedio</span></div>
+    <div class="stat"><b>${modo(P.pares)} pares</b><span>Lo más común (de 6)</span></div>
+    <div class="stat"><b>${modo(P.bajos)} bajos</b><span>Números del 1 al 20 (lo más común)</span></div>
+    <div class="stat"><b>${modo(P.consec)}</b><span>Pares consecutivos más común (ej. 9-10)</span></div>
+    <div class="stat"><b>${modo(P.decenas)} de 4</b><span>Grupos de decenas usados</span></div>`;
+
+  // Comparación entre grupos
+  pintarComparacion();
+
+  // Frecuencia
+  const orden = [...P.freq.keys()].slice(1).sort((a,b)=>P.freq[b]-P.freq[a]);
+  const top = new Set(orden.slice(0,8)), low = new Set(orden.slice(-8));
+  let f = "";
+  for(let n=MIN;n<=MAX;n++){
+    const st = top.has(n) ? 'background:var(--acc);color:#04210f' : low.has(n) ? 'background:#3a4150' : '';
+    f += `<div class="fcell" style="${st}"><b>${n}</b>${P.freq[n]}x</div>`;
+  }
+  $("freq").innerHTML = f;
+
+  // Historial
+  $("histCount").textContent = H.length;
+  const extraSet = new Set(extra.map(e=>e.fecha+e.nums.join()));
+  $("historial").innerHTML = [...H].reverse().map(h=>{
+    const esExtra = extraSet.has(h.fecha+h.nums.join());
+    return `<div class="row"><span class="date">${h.fecha}</span><div class="balls">${bolas(h.nums)}</div>
+      ${esExtra?`<button class="small sec" onclick="borrar('${h.fecha}','${h.nums.join()}')">✕</button>`:'<span style="width:30px"></span>'}</div>`;
+  }).join("");
+  return P;
+}
+
+/* ---------- Comparar dos grupos de fechas ---------- */
+function resumen(grupo){
+  const R = grupo.map(h=>rasgos(h.nums));
+  const prom = k => R.reduce((a,r)=>a+r[k],0)/R.length;
+  const freq = Array(MAX+1).fill(0);
+  grupo.forEach(h=>h.nums.forEach(n=>freq[n]++));
+  const top = [...freq.keys()].slice(1).sort((a,b)=>freq[b]-freq[a]).slice(0,6).sort((a,b)=>a-b);
+  return { n: grupo.length, suma: prom("suma"), pares: prom("pares"), bajos: prom("bajos"),
+           consec: prom("consecutivos"), rango: prom("rango"), freq, top };
+}
+function pintarComparacion(){
+  const A = HISTORIAL_ARCHIVO, B = HISTORIAL_BASE;
+  const PA = aprender(A), rA = resumen(A), rB = resumen(B);
+  // Parecido de cada sorteo con el patrón del archivo
+  const promParecido = g => Math.round(g.reduce((a,h)=>a+parecido(h.nums,PA),0)/g.length);
+  const base = promParecido(A), recientes = promParecido(B);
+  // Parecido en la frecuencia de números (proporciones por número)
+  let dif = 0;
+  for(let n=MIN;n<=MAX;n++) dif += Math.abs(rA.freq[n]/(rA.n*K) - rB.freq[n]/(rB.n*K));
+  const simFreq = Math.round((1 - dif/2)*100);
+  const comunes = rA.top.filter(n=>rB.top.includes(n));
+  const fila = (t,a,b) => `<div class="row"><span>${t}</span><span><b>${a}</b> · <b>${b}</b></span></div>`;
+  $("comparacion").innerHTML = `
+    <div class="grid" style="margin-bottom:8px">
+      <div class="stat"><b class="ok">${recientes}%</b><span>Sorteos recientes vs. patrón del archivo (el archivo consigo mismo da ${base}%)</span></div>
+      <div class="stat"><b class="ok">${simFreq}%</b><span>Parecido en qué números salen</span></div>
+    </div>
+    <div class="sub" style="text-align:right">Archivo · Supabase</div>
+    ${fila("Sorteos", rA.n, rB.n)}
+    ${fila("Suma promedio", rA.suma.toFixed(1), rB.suma.toFixed(1))}
+    ${fila("Pares promedio", rA.pares.toFixed(2), rB.pares.toFixed(2))}
+    ${fila("Bajos (1-20) promedio", rA.bajos.toFixed(2), rB.bajos.toFixed(2))}
+    ${fila("Consecutivos promedio", rA.consec.toFixed(2), rB.consec.toFixed(2))}
+    ${fila("Rango promedio", rA.rango.toFixed(1), rB.rango.toFixed(1))}
+    <div style="margin-top:10px" class="sub">6 números que más salen en el archivo</div>
+    <div class="balls" style="margin:4px 0 8px">${bolas(rA.top)}</div>
+    <div class="sub">6 números que más salen en Supabase</div>
+    <div class="balls" style="margin:4px 0 8px">${bolas(rB.top)}</div>
+    <div class="note">Números en común entre los dos tops: ${comunes.length ? comunes.join(", ") : "ninguno"}</div>`;
+}
+
+/* =========================================================
+   SIMILITUD ENTRE DOS COMBINACIONES (siempre disponible)
+   60% = números en común · 40% = misma "forma"
+   ========================================================= */
+function parseNums(txt){
+  const n = (txt||"").split(/[\s,;.\-]+/).filter(Boolean).map(Number);
+  const u = [...new Set(n)];
+  return (u.length===6 && u.every(x=>Number.isInteger(x)&&x>=MIN&&x<=MAX)) ? u.sort((a,b)=>a-b) : null;
+}
+function similitud(a,b){
+  const comunes = a.filter(n=>b.includes(n));
+  const ra = rasgos(a), rb = rasgos(b);
+  const d = Math.abs(ra.suma-rb.suma)/120 + Math.abs(ra.pares-rb.pares)/6 + Math.abs(ra.bajos-rb.bajos)/6
+          + Math.abs(ra.consecutivos-rb.consecutivos)/5 + Math.abs(ra.rango-rb.rango)/39 + Math.abs(ra.decenas-rb.decenas)/3;
+  const forma = Math.max(0, 1 - d/3);
+  return { comunes, forma: Math.round(forma*100), total: Math.round(comunes.length/6*60 + forma*40) };
+}
+function masParecidas(c, H, cuantas=3){
+  return H.map(h=>({h, s:similitud(c,h.nums)}))
+          .sort((x,y)=>y.s.comunes.length-x.s.comunes.length || y.s.total-x.s.total)
+          .slice(0,cuantas);
+}
+function htmlParecidas(c, H){
+  return `<div class="sub" style="margin-top:6px">Sorteos del historial más parecidos:</div>` +
+    masParecidas(c,H).map(x=>`<div class="row"><span class="date">${x.h.fecha}</span>
+      <div class="balls">${x.h.nums.map(n=>`<div class="ball ${x.s.comunes.includes(n)?'hot':''}">${n}</div>`).join("")}</div>
+      <div class="score"><b>${x.s.comunes.length}</b> en común<br>${x.s.total}% similar</div></div>`).join("");
+}
+
+/* =========================================================
+   MODO DESAFÍO
+   El sistema intenta adivinar una combinación secreta.
+   Solo recibe una pista por intento: cuántos números acertó.
+   Recuerda cada partida, mide qué estrategia le funciona mejor
+   y registra sus errores.
+   ========================================================= */
+const LIMITE = 20;  // cada pista da poca información: lo normal son 12-15 intentos
+const CLAVE_MEM = "loto_memoria_v1";
+const TAM_MUESTRA = 2500;
+
+/* Partidas que el sistema ya jugó (quedan grabadas en el código) */
+const MEMORIA_BASE = [
+  { fecha: "2026-11-02", objetivo: "Sorteo 28-08-2024 (prueba a ciegas)", estrategia: "patrones", resultado: "ganó", sinPistas: 1,
+    errores: [
+      "Antes de usar pistas intentó adivinar solo con patrones del historial y falló: 1 acierto y luego 0. Los patrones no bastan para adivinar un sorteo.",
+      "El auto-ajuste con 129 sorteos solo logró 0.97 aciertos de promedio, casi igual que el azar (0.90)."
+    ],
+    intentos: [
+      { combo:[3,7,10,20,22,35], aciertos:1, posiblesAntes:3838380, posiblesDespues:1669536 },
+      { combo:[3,10,14,20,22,35], aciertos:0, posiblesAntes:1669536, posiblesDespues:237336 },
+      { combo:[2,6,7,13,15,32], aciertos:2, posiblesAntes:237336, posiblesDespues:102375 },
+      { combo:[2,4,7,9,25,36], aciertos:2, posiblesAntes:102375, posiblesDespues:43010 },
+      { combo:[4,6,7,23,33,37], aciertos:1, posiblesAntes:43010, posiblesDespues:17955 },
+      { combo:[1,2,5,7,30,34], aciertos:1, posiblesAntes:17955, posiblesDespues:6120 },
+      { combo:[7,8,9,11,32,38], aciertos:1, posiblesAntes:6120, posiblesDespues:1456 },
+      { combo:[7,13,18,24,25,39], aciertos:3, posiblesAntes:1456, posiblesDespues:528 },
+      { combo:[7,13,17,18,36,40], aciertos:3, posiblesAntes:528, posiblesDespues:184 },
+      { combo:[7,15,18,21,24,36], aciertos:1, posiblesAntes:184, posiblesDespues:56 },
+      { combo:[7,13,19,25,28,40], aciertos:4, posiblesAntes:56, posiblesDespues:27 },
+      { combo:[7,13,16,25,27,40], aciertos:4, posiblesAntes:27, posiblesDespues:10 },
+      { combo:[7,12,13,25,29,40], aciertos:4, posiblesAntes:10, posiblesDespues:1 },
+      { combo:[7,13,25,26,31,40], aciertos:6, posiblesAntes:1, posiblesDespues:1 }
+    ] },
+  { fecha: "2026-11-02", objetivo: "Sorteo 30-09-2020", fechaSorteo: "2020-09-30", guardadaEnHistorial: true, estrategia: "informacion", resultado: "ganó", sinPistas: 1,
+    errores: [
+      "Intentos 10, 11 y 12: ya tenía 5 de 6 y cambió un solo número cada vez; solo descartó entre 9% y 21%. Corregido: ahora usa sondas que prueban varios números dudosos a la vez."
+    ],
+    intentos: [
+      { combo:[13,14,16,19,30,32], aciertos:1, posiblesAntes:3838380, posiblesDespues:1669536 },
+      { combo:[3,7,13,24,35,38], aciertos:0, posiblesAntes:1669536, posiblesDespues:593775 },
+      { combo:[12,16,22,26,27,31], aciertos:2, posiblesAntes:593775, posiblesDespues:134090 },
+      { combo:[4,10,15,16,18,31], aciertos:3, posiblesAntes:134090, posiblesDespues:11136 },
+      { combo:[10,12,15,18,19,26], aciertos:1, posiblesAntes:11136, posiblesDespues:4920 },
+      { combo:[2,16,17,18,20,31], aciertos:3, posiblesAntes:4920, posiblesDespues:1628 },
+      { combo:[1,10,16,20,29,31], aciertos:4, posiblesAntes:1628, posiblesDespues:212 },
+      { combo:[6,10,16,20,23,31], aciertos:3, posiblesAntes:212, posiblesDespues:80 },
+      { combo:[1,15,16,20,31,36], aciertos:4, posiblesAntes:80, posiblesDespues:14 },
+      { combo:[5,15,16,20,29,31], aciertos:5, posiblesAntes:14, posiblesDespues:11 },
+      { combo:[8,15,16,20,29,31], aciertos:5, posiblesAntes:11, posiblesDespues:10 },
+      { combo:[15,16,20,25,29,31], aciertos:5, posiblesAntes:10, posiblesDespues:9 },
+      { combo:[11,15,16,20,29,31], aciertos:6, posiblesAntes:9, posiblesDespues:1 }
+    ] },
+  // ---- Partidas del 02-11-2026 (copiadas del celular) ----
+  {"fecha": "2026-11-02", "objetivo": "Sin nombre", "estrategia": "informacion", "resultado": "error", "intentos": [{"combo": [6, 9, 10, 20, 29, 35], "aciertos": 0, "posiblesAntes": 3838380, "posiblesDespues": 1344904}, {"combo": [3, 8, 16, 22, 30, 36], "aciertos": 1, "posiblesAntes": 1344904, "posiblesDespues": 589680}, {"combo": [12, 16, 24, 28, 39, 40], "aciertos": 1, "posiblesAntes": 589680, "posiblesDespues": 255024}, {"combo": [18, 19, 22, 25, 28, 37], "aciertos": 2, "posiblesAntes": 255024, "posiblesDespues": 57114}, {"combo": [2, 22, 23, 28, 32, 34], "aciertos": 2, "posiblesAntes": 57114, "posiblesDespues": 15921}, {"combo": [22, 25, 31, 34, 38, 40], "aciertos": 0, "posiblesAntes": 15921, "posiblesDespues": 3033}, {"combo": [3, 4, 15, 18, 23, 28], "aciertos": 1, "posiblesAntes": 3033, "posiblesDespues": 745}, {"combo": [2, 11, 13, 19, 28, 30], "aciertos": 4, "posiblesAntes": 745, "posiblesDespues": 113}, {"combo": [2, 5, 8, 13, 21, 37], "aciertos": 1, "posiblesAntes": 113, "posiblesDespues": 38}, {"combo": [2, 11, 14, 17, 33, 36], "aciertos": 1, "posiblesAntes": 38, "posiblesDespues": 11}, {"combo": [2, 7, 14, 27, 33, 35], "aciertos": 1, "posiblesAntes": 11, "posiblesDespues": 3}, {"combo": [13, 14, 19, 28, 30, 32], "aciertos": 4, "posiblesAntes": 3}], "errores": ["Las pistas se contradicen: ninguna combinación cumple todas. Probablemente algún conteo de aciertos está mal."], "fechaSorteo": null, "sinPistas": 0},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-09-23", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [1, 23, 27, 36, 37, 40], "aciertos": 0, "posiblesAntes": 3838380, "posiblesDespues": 1344904}, {"combo": [3, 15, 20, 22, 30, 35], "aciertos": 1, "posiblesAntes": 1344904, "posiblesDespues": 589680}, {"combo": [2, 10, 14, 17, 32, 35], "aciertos": 2, "posiblesAntes": 589680, "posiblesDespues": 132825}, {"combo": [3, 10, 14, 19, 31, 38], "aciertos": 1, "posiblesAntes": 132825, "posiblesDespues": 57570}, {"combo": [7, 10, 13, 20, 25, 32], "aciertos": 1, "posiblesAntes": 57570, "posiblesDespues": 23919}, {"combo": [2, 13, 17, 19, 22, 26], "aciertos": 3, "posiblesAntes": 23919, "posiblesDespues": 1848}, {"combo": [2, 7, 17, 22, 24, 31], "aciertos": 1, "posiblesAntes": 1848, "posiblesDespues": 390}, {"combo": [2, 6, 13, 19, 28, 35], "aciertos": 3, "posiblesAntes": 390, "posiblesDespues": 116}, {"combo": [2, 6, 15, 19, 26, 32], "aciertos": 4, "posiblesAntes": 116, "posiblesDespues": 2}, {"combo": [2, 6, 13, 14, 15, 26], "aciertos": 2, "posiblesAntes": 2, "posiblesDespues": 1}, {"combo": [2, 19, 26, 28, 30, 32], "aciertos": 6, "posiblesAntes": 1, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-09-23", "sinPistas": 0, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-09-26", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [1, 5, 12, 21, 24, 32], "aciertos": 2, "posiblesAntes": 3838380, "posiblesDespues": 695640}, {"combo": [1, 7, 9, 22, 30, 32], "aciertos": 0, "posiblesAntes": 695640, "posiblesDespues": 164430}, {"combo": [3, 10, 12, 17, 24, 35], "aciertos": 0, "posiblesAntes": 164430, "posiblesDespues": 14950}, {"combo": [2, 5, 14, 21, 26, 29], "aciertos": 2, "posiblesAntes": 14950, "posiblesDespues": 7315}, {"combo": [5, 8, 13, 20, 21, 38], "aciertos": 2, "posiblesAntes": 7315, "posiblesDespues": 3060}, {"combo": [5, 6, 15, 21, 28, 40], "aciertos": 2, "posiblesAntes": 3060, "posiblesDespues": 1001}, {"combo": [5, 11, 16, 18, 21, 36], "aciertos": 3, "posiblesAntes": 1001, "posiblesDespues": 480}, {"combo": [4, 5, 19, 21, 31, 36], "aciertos": 4, "posiblesAntes": 480, "posiblesDespues": 126}, {"combo": [4, 5, 16, 21, 25, 31], "aciertos": 4, "posiblesAntes": 126, "posiblesDespues": 40}, {"combo": [5, 16, 19, 21, 31, 34], "aciertos": 4, "posiblesAntes": 40, "posiblesDespues": 10}, {"combo": [4, 5, 16, 19, 21, 33], "aciertos": 3, "posiblesAntes": 10, "posiblesDespues": 4}, {"combo": [4, 5, 11, 21, 31, 34], "aciertos": 6, "posiblesAntes": 4, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-09-26", "sinPistas": 2, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-09-30", "estrategia": "patrones", "resultado": "error", "intentos": [{"combo": [3, 8, 12, 16, 23, 25], "aciertos": 1, "posiblesAntes": 3838380, "posiblesDespues": 1669536}, {"combo": [3, 9, 11, 20, 22, 32], "aciertos": 2, "posiblesAntes": 1669536, "posiblesDespues": 301455}, {"combo": [3, 10, 17, 22, 29, 38], "aciertos": 1, "posiblesAntes": 301455, "posiblesDespues": 132600}, {"combo": [2, 7, 20, 22, 23, 35], "aciertos": 1, "posiblesAntes": 132600, "posiblesDespues": 56683}, {"combo": [3, 6, 14, 15, 32, 35], "aciertos": 6, "posiblesAntes": 56683, "posiblesDespues": 1}], "errores": ["Se marcó como correcta por error en el intento 5 (era 1 acierto, no 6). Partida no válida."], "fechaSorteo": "2020-09-30", "sinPistas": 1},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-09-30", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [2, 5, 6, 8, 15, 23], "aciertos": 1, "posiblesAntes": 3838380, "posiblesDespues": 1669536}, {"combo": [3, 6, 9, 22, 25, 32], "aciertos": 0, "posiblesAntes": 1669536, "posiblesDespues": 593775}, {"combo": [2, 10, 13, 19, 31, 35], "aciertos": 1, "posiblesAntes": 593775, "posiblesDespues": 255024}, {"combo": [7, 15, 20, 24, 30, 35], "aciertos": 2, "posiblesAntes": 255024, "posiblesDespues": 57285}, {"combo": [2, 7, 14, 17, 29, 30], "aciertos": 1, "posiblesAntes": 57285, "posiblesDespues": 25092}, {"combo": [11, 14, 20, 23, 35, 40], "aciertos": 2, "posiblesAntes": 25092, "posiblesDespues": 6551}, {"combo": [7, 10, 20, 23, 27, 38], "aciertos": 1, "posiblesAntes": 6551, "posiblesDespues": 2486}, {"combo": [11, 14, 15, 24, 31, 38], "aciertos": 3, "posiblesAntes": 2486, "posiblesDespues": 316}, {"combo": [1, 14, 15, 20, 31, 36], "aciertos": 3, "posiblesAntes": 316, "posiblesDespues": 70}, {"combo": [5, 14, 20, 24, 31, 33], "aciertos": 2, "posiblesAntes": 70, "posiblesDespues": 24}, {"combo": [4, 11, 15, 20, 29, 31], "aciertos": 5, "posiblesAntes": 24, "posiblesDespues": 10}, {"combo": [11, 15, 18, 20, 29, 31], "aciertos": 5, "posiblesAntes": 10, "posiblesDespues": 8}, {"combo": [11, 15, 20, 26, 29, 31], "aciertos": 5, "posiblesAntes": 8, "posiblesDespues": 7}, {"combo": [11, 12, 15, 20, 29, 31], "aciertos": 5, "posiblesAntes": 7, "posiblesDespues": 6}, {"combo": [11, 15, 20, 28, 29, 31], "aciertos": 5, "posiblesAntes": 6, "posiblesDespues": 5}, {"combo": [11, 15, 16, 20, 29, 31], "aciertos": 6, "posiblesAntes": 5, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-09-30", "sinPistas": 1},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-03", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [5, 13, 19, 21, 28, 32], "aciertos": 0, "posiblesAntes": 3838380, "posiblesDespues": 1344904}, {"combo": [3, 7, 10, 14, 31, 35], "aciertos": 0, "posiblesAntes": 1344904, "posiblesDespues": 376740}, {"combo": [11, 15, 20, 22, 29, 38], "aciertos": 0, "posiblesAntes": 376740, "posiblesDespues": 74613}, {"combo": [2, 6, 9, 23, 30, 37], "aciertos": 0, "posiblesAntes": 74613, "posiblesDespues": 8008}, {"combo": [1, 12, 17, 24, 26, 33], "aciertos": 2, "posiblesAntes": 8008, "posiblesDespues": 3150}, {"combo": [1, 4, 12, 25, 27, 36], "aciertos": 2, "posiblesAntes": 3150, "posiblesDespues": 1195}, {"combo": [4, 8, 17, 24, 27, 39], "aciertos": 2, "posiblesAntes": 1195, "posiblesDespues": 435}, {"combo": [8, 12, 16, 25, 33, 39], "aciertos": 0, "posiblesAntes": 435, "posiblesDespues": 16}, {"combo": [1, 17, 18, 27, 34, 40], "aciertos": 4, "posiblesAntes": 16, "posiblesDespues": 4}, {"combo": [1, 4, 18, 24, 34, 40], "aciertos": 2, "posiblesAntes": 4, "posiblesDespues": 3}, {"combo": [17, 18, 26, 27, 36, 40], "aciertos": 5, "posiblesAntes": 3, "posiblesDespues": 2}, {"combo": [17, 18, 26, 27, 34, 36], "aciertos": 6, "posiblesAntes": 2, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-03", "sinPistas": 0, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-07", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [11, 19, 23, 28, 29, 32], "aciertos": 2, "posiblesAntes": 3838380, "posiblesDespues": 695640}, {"combo": [2, 9, 15, 19, 22, 32], "aciertos": 0, "posiblesAntes": 695640, "posiblesDespues": 164430}, {"combo": [3, 11, 14, 20, 23, 35], "aciertos": 1, "posiblesAntes": 164430, "posiblesDespues": 70200}, {"combo": [4, 7, 10, 23, 28, 31], "aciertos": 2, "posiblesAntes": 70200, "posiblesDespues": 24717}, {"combo": [1, 10, 13, 20, 28, 29], "aciertos": 3, "posiblesAntes": 24717, "posiblesDespues": 2693}, {"combo": [6, 10, 13, 23, 29, 38], "aciertos": 2, "posiblesAntes": 2693, "posiblesDespues": 1152}, {"combo": [3, 10, 17, 24, 28, 29], "aciertos": 4, "posiblesAntes": 1152, "posiblesDespues": 191}, {"combo": [3, 10, 12, 25, 28, 29], "aciertos": 4, "posiblesAntes": 191, "posiblesDespues": 99}, {"combo": [10, 12, 17, 28, 29, 35], "aciertos": 3, "posiblesAntes": 99, "posiblesDespues": 92}, {"combo": [3, 8, 10, 28, 29, 33], "aciertos": 4, "posiblesAntes": 92, "posiblesDespues": 66}, {"combo": [3, 5, 10, 28, 29, 36], "aciertos": 5, "posiblesAntes": 66, "posiblesDespues": 20}, {"combo": [3, 10, 18, 28, 29, 36], "aciertos": 4, "posiblesAntes": 20, "posiblesDespues": 9}, {"combo": [3, 5, 10, 28, 29, 34], "aciertos": 5, "posiblesAntes": 9, "posiblesDespues": 8}, {"combo": [3, 5, 10, 28, 29, 37], "aciertos": 5, "posiblesAntes": 8, "posiblesDespues": 7}, {"combo": [3, 5, 10, 26, 28, 29], "aciertos": 6, "posiblesAntes": 7, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-07", "sinPistas": 2, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-10", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [4, 11, 20, 31, 32, 34], "aciertos": 1, "posiblesAntes": 3838380, "posiblesDespues": 1669536}, {"combo": [3, 9, 15, 20, 22, 30], "aciertos": 1, "posiblesAntes": 1669536, "posiblesDespues": 712530}, {"combo": [3, 10, 17, 26, 32, 35], "aciertos": 1, "posiblesAntes": 712530, "posiblesDespues": 299000}, {"combo": [6, 10, 13, 19, 22, 31], "aciertos": 1, "posiblesAntes": 299000, "posiblesDespues": 123816}, {"combo": [2, 7, 14, 22, 29, 32], "aciertos": 1, "posiblesAntes": 123816, "posiblesDespues": 49080}, {"combo": [2, 12, 15, 24, 31, 35], "aciertos": 3, "posiblesAntes": 49080, "posiblesDespues": 2265}, {"combo": [2, 13, 20, 24, 27, 35], "aciertos": 0, "posiblesAntes": 2265, "posiblesDespues": 90}, {"combo": [7, 12, 15, 26, 31, 38], "aciertos": 4, "posiblesAntes": 90, "posiblesDespues": 44}, {"combo": [7, 12, 15, 17, 31, 36], "aciertos": 5, "posiblesAntes": 44, "posiblesDespues": 13}, {"combo": [7, 12, 15, 17, 31, 40], "aciertos": 5, "posiblesAntes": 13, "posiblesDespues": 12}, {"combo": [7, 12, 15, 17, 28, 31], "aciertos": 5, "posiblesAntes": 12, "posiblesDespues": 11}, {"combo": [7, 12, 15, 17, 31, 33], "aciertos": 5, "posiblesAntes": 11, "posiblesDespues": 10}, {"combo": [7, 12, 15, 17, 31, 39], "aciertos": 5, "posiblesAntes": 10, "posiblesDespues": 9}, {"combo": [7, 12, 15, 17, 25, 31], "aciertos": 5, "posiblesAntes": 9, "posiblesDespues": 8}, {"combo": [7, 12, 15, 17, 23, 31], "aciertos": 5, "posiblesAntes": 8, "posiblesDespues": 7}, {"combo": [7, 12, 15, 17, 31, 37], "aciertos": 5, "posiblesAntes": 7, "posiblesDespues": 6}, {"combo": [7, 12, 15, 17, 21, 31], "aciertos": 5, "posiblesAntes": 6, "posiblesDespues": 5}, {"combo": [7, 12, 15, 17, 18, 31], "aciertos": 6, "posiblesAntes": 5, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-10", "sinPistas": 1, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-14", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [3, 11, 22, 26, 27, 29], "aciertos": 1, "posiblesAntes": 3838380, "posiblesDespues": 1669536}, {"combo": [6, 10, 15, 19, 22, 31], "aciertos": 0, "posiblesAntes": 1669536, "posiblesDespues": 593775}, {"combo": [3, 7, 9, 30, 35, 38], "aciertos": 1, "posiblesAntes": 593775, "posiblesDespues": 255024}, {"combo": [2, 13, 14, 20, 29, 35], "aciertos": 1, "posiblesAntes": 255024, "posiblesDespues": 108015}, {"combo": [7, 11, 14, 17, 32, 36], "aciertos": 1, "posiblesAntes": 108015, "posiblesDespues": 45084}, {"combo": [3, 12, 20, 23, 25, 32], "aciertos": 0, "posiblesAntes": 45084, "posiblesDespues": 13650}, {"combo": [1, 13, 17, 24, 26, 30], "aciertos": 1, "posiblesAntes": 13650, "posiblesDespues": 5306}, {"combo": [2, 7, 18, 21, 24, 27], "aciertos": 2, "posiblesAntes": 5306, "posiblesDespues": 1502}, {"combo": [2, 9, 11, 24, 28, 33], "aciertos": 2, "posiblesAntes": 1502, "posiblesDespues": 448}, {"combo": [2, 5, 7, 26, 28, 37], "aciertos": 4, "posiblesAntes": 448, "posiblesDespues": 28}, {"combo": [2, 4, 7, 26, 33, 37], "aciertos": 3, "posiblesAntes": 28, "posiblesDespues": 10}, {"combo": [2, 7, 8, 26, 28, 39], "aciertos": 4, "posiblesAntes": 10, "posiblesDespues": 3}, {"combo": [2, 7, 16, 26, 28, 34], "aciertos": 6, "posiblesAntes": 3, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-14", "sinPistas": 1, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-17", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [5, 17, 18, 22, 25, 31], "aciertos": 2, "posiblesAntes": 3838380, "posiblesDespues": 695640}, {"combo": [10, 13, 17, 22, 30, 35], "aciertos": 0, "posiblesAntes": 695640, "posiblesDespues": 164430}, {"combo": [2, 15, 18, 20, 25, 29], "aciertos": 1, "posiblesAntes": 164430, "posiblesDespues": 70200}, {"combo": [3, 7, 14, 18, 26, 31], "aciertos": 1, "posiblesAntes": 70200, "posiblesDespues": 26950}, {"combo": [5, 9, 20, 24, 31, 38], "aciertos": 2, "posiblesAntes": 26950, "posiblesDespues": 10773}, {"combo": [2, 5, 12, 19, 31, 32], "aciertos": 4, "posiblesAntes": 10773, "posiblesDespues": 462}, {"combo": [2, 5, 11, 31, 32, 36], "aciertos": 4, "posiblesAntes": 462, "posiblesDespues": 155}, {"combo": [2, 5, 6, 19, 31, 36], "aciertos": 3, "posiblesAntes": 155, "posiblesDespues": 95}, {"combo": [2, 5, 8, 23, 31, 32], "aciertos": 3, "posiblesAntes": 95, "posiblesDespues": 15}, {"combo": [5, 12, 15, 31, 32, 36], "aciertos": 3, "posiblesAntes": 15, "posiblesDespues": 12}, {"combo": [2, 5, 11, 12, 31, 37], "aciertos": 5, "posiblesAntes": 12, "posiblesDespues": 10}, {"combo": [2, 5, 11, 12, 31, 40], "aciertos": 5, "posiblesAntes": 10, "posiblesDespues": 9}, {"combo": [2, 5, 11, 12, 31, 39], "aciertos": 5, "posiblesAntes": 9, "posiblesDespues": 8}, {"combo": [2, 5, 11, 12, 28, 31], "aciertos": 5, "posiblesAntes": 8, "posiblesDespues": 7}, {"combo": [2, 5, 11, 12, 31, 33], "aciertos": 5, "posiblesAntes": 7, "posiblesDespues": 6}, {"combo": [2, 5, 11, 12, 27, 31], "aciertos": 5, "posiblesAntes": 6, "posiblesDespues": 5}, {"combo": [2, 5, 11, 12, 31, 34], "aciertos": 6, "posiblesAntes": 5, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-17", "sinPistas": 2, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-21", "estrategia": "patrones", "resultado": "perdió", "intentos": [{"combo": [7, 15, 17, 26, 28, 36], "aciertos": 2, "posiblesAntes": 3838380, "posiblesDespues": 695640}, {"combo": [3, 10, 15, 28, 32, 35], "aciertos": 2, "posiblesAntes": 695640, "posiblesDespues": 172985}, {"combo": [7, 10, 12, 17, 22, 35], "aciertos": 0, "posiblesAntes": 172985, "posiblesDespues": 47061}, {"combo": [3, 6, 15, 20, 31, 36], "aciertos": 2, "posiblesAntes": 47061, "posiblesDespues": 16875}, {"combo": [2, 13, 15, 25, 32, 36], "aciertos": 1, "posiblesAntes": 16875, "posiblesDespues": 7964}, {"combo": [1, 3, 15, 24, 26, 30], "aciertos": 2, "posiblesAntes": 7964, "posiblesDespues": 2232}, {"combo": [3, 11, 13, 20, 26, 28], "aciertos": 2, "posiblesAntes": 2232, "posiblesDespues": 1029}, {"combo": [6, 9, 11, 15, 28, 30], "aciertos": 3, "posiblesAntes": 1029, "posiblesDespues": 222}, {"combo": [5, 15, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 222, "posiblesDespues": 30}, {"combo": [5, 14, 15, 20, 28, 30], "aciertos": 4, "posiblesAntes": 30, "posiblesDespues": 14}, {"combo": [4, 15, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 14, "posiblesDespues": 13}, {"combo": [8, 15, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 13, "posiblesDespues": 12}, {"combo": [15, 19, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 12, "posiblesDespues": 11}, {"combo": [15, 18, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 11, "posiblesDespues": 10}, {"combo": [15, 20, 23, 28, 30, 39], "aciertos": 5, "posiblesAntes": 10, "posiblesDespues": 9}, {"combo": [15, 16, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 9, "posiblesDespues": 8}, {"combo": [15, 20, 23, 28, 30, 40], "aciertos": 5, "posiblesAntes": 8, "posiblesDespues": 7}, {"combo": [15, 20, 23, 27, 28, 30], "aciertos": 5, "posiblesAntes": 7, "posiblesDespues": 6}, {"combo": [15, 20, 21, 23, 28, 30], "aciertos": 5, "posiblesAntes": 6, "posiblesDespues": 5}, {"combo": [15, 20, 23, 28, 30, 38], "aciertos": 5, "posiblesAntes": 5, "posiblesDespues": 4}], "quedaban": 4, "errores": [], "fechaSorteo": "2020-10-21", "sinPistas": 2},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-21", "estrategia": "patrones", "resultado": "ganó", "intentos": [{"combo": [5, 7, 16, 26, 27, 29], "aciertos": 0, "posiblesAntes": 3838380, "posiblesDespues": 1344904}, {"combo": [3, 10, 13, 22, 32, 35], "aciertos": 0, "posiblesAntes": 1344904, "posiblesDespues": 376740}, {"combo": [2, 6, 15, 19, 31, 36], "aciertos": 1, "posiblesAntes": 376740, "posiblesDespues": 158004}, {"combo": [11, 15, 17, 20, 28, 38], "aciertos": 3, "posiblesAntes": 158004, "posiblesDespues": 13600}, {"combo": [2, 9, 17, 20, 28, 30], "aciertos": 3, "posiblesAntes": 13600, "posiblesDespues": 2592}, {"combo": [9, 14, 17, 20, 31, 38], "aciertos": 1, "posiblesAntes": 2592, "posiblesDespues": 476}, {"combo": [2, 11, 20, 23, 25, 28], "aciertos": 3, "posiblesAntes": 476, "posiblesDespues": 147}, {"combo": [1, 15, 20, 25, 28, 30], "aciertos": 4, "posiblesAntes": 147, "posiblesDespues": 16}, {"combo": [1, 6, 11, 20, 28, 30], "aciertos": 3, "posiblesAntes": 16, "posiblesDespues": 12}, {"combo": [4, 15, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 12, "posiblesDespues": 10}, {"combo": [8, 15, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 10, "posiblesDespues": 9}, {"combo": [12, 15, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 9, "posiblesDespues": 8}, {"combo": [15, 18, 20, 23, 28, 30], "aciertos": 5, "posiblesAntes": 8, "posiblesDespues": 7}, {"combo": [15, 20, 23, 28, 30, 39], "aciertos": 5, "posiblesAntes": 7, "posiblesDespues": 6}, {"combo": [15, 20, 23, 28, 30, 40], "aciertos": 5, "posiblesAntes": 6, "posiblesDespues": 5}, {"combo": [15, 20, 23, 24, 28, 30], "aciertos": 5, "posiblesAntes": 5, "posiblesDespues": 4}, {"combo": [15, 20, 21, 23, 28, 30], "aciertos": 5, "posiblesAntes": 4, "posiblesDespues": 3}, {"combo": [15, 20, 23, 28, 30, 33], "aciertos": 5, "posiblesAntes": 3, "posiblesDespues": 2}, {"combo": [15, 20, 23, 28, 30, 34], "aciertos": 6, "posiblesAntes": 2, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-21", "sinPistas": 0, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-24", "estrategia": "informacion", "resultado": "error", "intentos": [{"combo": [7, 11, 18, 26, 29, 35], "aciertos": 1, "posiblesAntes": 3838380, "posiblesDespues": 1669536}, {"combo": [12, 18, 25, 30, 31, 34], "aciertos": 1, "posiblesAntes": 1669536, "posiblesDespues": 712530}, {"combo": [10, 12, 16, 17, 26, 40], "aciertos": 4, "posiblesAntes": 712530, "posiblesDespues": 2641}, {"combo": [3, 7, 14, 17, 34, 38], "aciertos": 0, "posiblesAntes": 2641, "posiblesDespues": 825}, {"combo": [4, 11, 31, 33, 37, 40], "aciertos": 0, "posiblesAntes": 825, "posiblesDespues": 171}, {"combo": [2, 6, 9, 10, 18, 22], "aciertos": 0, "posiblesAntes": 171, "posiblesDespues": 0}, {"combo": [1, 8, 12, 23, 28, 29], "aciertos": 2, "posiblesAntes": 0, "posiblesDespues": 0}, {"combo": [12, 23, 27, 32, 35, 36], "aciertos": 0, "posiblesAntes": 0, "posiblesDespues": 0}, {"combo": [1, 13, 15, 26, 28, 30], "aciertos": 3, "posiblesAntes": 0, "posiblesDespues": 0}, {"combo": [1, 8, 15, 21, 25, 26], "aciertos": 3, "posiblesAntes": 0, "posiblesDespues": 0}, {"combo": [1, 8, 19, 20, 26, 30], "aciertos": 3, "posiblesAntes": 0, "posiblesDespues": 0}, {"combo": [1, 5, 20, 25, 26, 28], "aciertos": 2, "posiblesAntes": 0, "posiblesDespues": 0}, {"combo": [8, 21, 24, 26, 28, 30], "aciertos": 5, "posiblesAntes": 0, "posiblesDespues": 0}, {"combo": [8, 21, 26, 28, 30, 39], "aciertos": 5, "posiblesAntes": 0, "posiblesDespues": 1}], "errores": ["El intento 3 estaba mal contado: se anotó 1, eran 4. Se corrigió y siguió la partida.", "Las pistas se contradicen: ninguna combinación cumple todas. Probablemente algún conteo de aciertos está mal."], "fechaSorteo": "2020-10-24", "sinPistas": 1},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-24", "estrategia": "informacion", "resultado": "ganó", "intentos": [{"combo": [4, 5, 11, 26, 31, 34], "aciertos": 2, "posiblesAntes": 3838380, "posiblesDespues": 695640}, {"combo": [5, 7, 19, 26, 27, 36], "aciertos": 1, "posiblesAntes": 695640, "posiblesDespues": 316680}, {"combo": [12, 15, 20, 21, 26, 34], "aciertos": 2, "posiblesAntes": 316680, "posiblesDespues": 79872}, {"combo": [1, 5, 10, 15, 23, 34], "aciertos": 0, "posiblesAntes": 79872, "posiblesDespues": 16767}, {"combo": [2, 3, 11, 21, 25, 26], "aciertos": 2, "posiblesAntes": 16767, "posiblesDespues": 7208}, {"combo": [8, 21, 26, 28, 31, 32], "aciertos": 4, "posiblesAntes": 7208, "posiblesDespues": 479}, {"combo": [4, 22, 28, 29, 32, 33], "aciertos": 2, "posiblesAntes": 479, "posiblesDespues": 123}, {"combo": [6, 21, 22, 26, 28, 31], "aciertos": 3, "posiblesAntes": 123, "posiblesDespues": 47}, {"combo": [14, 21, 26, 29, 31, 32], "aciertos": 2, "posiblesAntes": 47, "posiblesDespues": 12}, {"combo": [13, 16, 17, 24, 35, 38], "aciertos": 0, "posiblesAntes": 12, "posiblesDespues": 6}, {"combo": [9, 12, 13, 18, 30, 35], "aciertos": 1, "posiblesAntes": 6, "posiblesDespues": 3}, {"combo": [4, 8, 9, 21, 26, 28], "aciertos": 5, "posiblesAntes": 3, "posiblesDespues": 2}, {"combo": [4, 8, 18, 21, 26, 28], "aciertos": 5, "posiblesAntes": 2, "posiblesDespues": 1}, {"combo": [4, 8, 21, 26, 28, 30], "aciertos": 6, "posiblesAntes": 1, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-24", "sinPistas": 2, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-28", "estrategia": "informacion", "resultado": "ganó", "intentos": [{"combo": [5, 12, 23, 27, 31, 34], "aciertos": 0, "posiblesAntes": 3838380, "posiblesDespues": 1344904}, {"combo": [7, 9, 17, 29, 33, 37], "aciertos": 2, "posiblesAntes": 1344904, "posiblesDespues": 307125}, {"combo": [9, 14, 18, 21, 36, 37], "aciertos": 1, "posiblesAntes": 307125, "posiblesDespues": 133584}, {"combo": [8, 17, 22, 37, 39, 40], "aciertos": 0, "posiblesAntes": 133584, "posiblesDespues": 28215}, {"combo": [3, 9, 11, 24, 32, 33], "aciertos": 3, "posiblesAntes": 28215, "posiblesDespues": 4464}, {"combo": [3, 7, 11, 21, 24, 29], "aciertos": 1, "posiblesAntes": 4464, "posiblesDespues": 1680}, {"combo": [2, 11, 19, 20, 30, 35], "aciertos": 0, "posiblesAntes": 1680, "posiblesDespues": 330}, {"combo": [10, 15, 16, 24, 25, 38], "aciertos": 2, "posiblesAntes": 330, "posiblesDespues": 135}, {"combo": [3, 10, 16, 25, 28, 38], "aciertos": 4, "posiblesAntes": 135, "posiblesDespues": 6}, {"combo": [3, 9, 10, 25, 28, 33], "aciertos": 6, "posiblesAntes": 6, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-28", "sinPistas": 0, "guardadaEnHistorial": true},
+  {"fecha": "2026-11-02", "objetivo": "Sorteo 2020-10-31", "estrategia": "informacion", "resultado": "ganó", "intentos": [{"combo": [11, 12, 15, 26, 29, 34], "aciertos": 1, "posiblesAntes": 3838380, "posiblesDespues": 1669536}, {"combo": [4, 17, 21, 29, 33, 37], "aciertos": 1, "posiblesAntes": 1669536, "posiblesDespues": 712530}, {"combo": [2, 4, 8, 34, 35, 40], "aciertos": 0, "posiblesAntes": 712530, "posiblesDespues": 255530}, {"combo": [7, 16, 28, 29, 30, 32], "aciertos": 2, "posiblesAntes": 255530, "posiblesDespues": 54625}, {"combo": [1, 7, 14, 24, 29, 39], "aciertos": 0, "posiblesAntes": 54625, "posiblesDespues": 11520}, {"combo": [10, 15, 16, 23, 32, 33], "aciertos": 1, "posiblesAntes": 11520, "posiblesDespues": 4074}, {"combo": [3, 5, 12, 16, 30, 37], "aciertos": 2, "posiblesAntes": 4074, "posiblesDespues": 1490}, {"combo": [9, 11, 20, 30, 32, 37], "aciertos": 1, "posiblesAntes": 1490, "posiblesDespues": 418}, {"combo": [3, 12, 17, 19, 28, 32], "aciertos": 1, "posiblesAntes": 418, "posiblesDespues": 112}, {"combo": [13, 16, 17, 26, 30, 38], "aciertos": 3, "posiblesAntes": 112, "posiblesDespues": 23}, {"combo": [6, 13, 16, 26, 28, 37], "aciertos": 4, "posiblesAntes": 23, "posiblesDespues": 6}, {"combo": [8, 15, 18, 22, 25, 35], "aciertos": 0, "posiblesAntes": 6, "posiblesDespues": 3}, {"combo": [16, 26, 28, 31, 37, 38], "aciertos": 5, "posiblesAntes": 3, "posiblesDespues": 2}, {"combo": [16, 26, 27, 28, 37, 38], "aciertos": 6, "posiblesAntes": 2, "posiblesDespues": 1}], "errores": [], "fechaSorteo": "2020-10-31", "sinPistas": 1, "guardadaEnHistorial": true}
+];
+
+let MEM_LOCAL = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_MEM))||[]; } catch(e){ return []; } })();
+const claveP = m => [m.fechaSorteo||"", m.objetivo, m.estrategia, m.resultado, m.intentos.map(t=>t.combo.join("-")+":"+t.aciertos).join("|")].join("#");
+const memoria = () => { const vistas = new Set(), out = [];
+  [...MEMORIA_BASE, ...MEM_LOCAL].forEach(m=>{ const k = claveP(m); if(!vistas.has(k)){ vistas.add(k); out.push(m); } });
+  return out; };
+function guardarMem(){ try { localStorage.setItem(CLAVE_MEM, JSON.stringify(MEM_LOCAL)); } catch(e){} }
+
+const inter = (a,b) => { let k=0; for(const x of a) if(b.includes(x)) k++; return k; };
+
+/* Recorre TODAS las combinaciones que cumplen las pistas.
+   Devuelve cuántas quedan y una muestra al azar de ellas. */
+function explorar(clues, tam = TAM_MUESTRA){
+  const fuera = new Set(); clues.filter(p=>p.aciertos===0).forEach(p=>p.combo.forEach(n=>fuera.add(n)));
+  const nums = []; for(let n=MIN;n<=MAX;n++) if(!fuera.has(n)) nums.push(n);
+  const marcas = clues.map(p=>{ const s = new Uint8Array(MAX+1); p.combo.forEach(n=>s[n]=1); return s; });
+  const meta = clues.map(p=>p.aciertos), cnt = new Array(clues.length).fill(0);
+  let posibles = 0; const muestra = []; const c = [];
+  (function rec(start){
+    const faltan = 6 - c.length;
+    for(let k=0;k<clues.length;k++){ if(cnt[k]>meta[k] || cnt[k]+faltan<meta[k]) return; }
+    if(faltan===0){
+      posibles++;
+      if(muestra.length<tam) muestra.push([...c]);
+      else { const j = Math.floor(Math.random()*posibles); if(j<tam) muestra[j] = [...c]; }
+      return;
+    }
+    for(let i=start;i<=nums.length-faltan;i++){
+      const n = nums[i]; c.push(n);
+      for(let k=0;k<clues.length;k++) if(marcas[k][n]) cnt[k]++;
+      rec(i+1);
+      for(let k=0;k<clues.length;k++) if(marcas[k][n]) cnt[k]--;
+      c.pop();
+    }
+  })(0);
+  return { posibles, muestra };
+}
+
+/* Puntaje por patrones: números que más salen + forma típica */
+function puntajePatron(c, P){
+  const fMax = Math.max(...P.freq.slice(1)) || 1;
+  return c.reduce((a,n)=>a+P.freq[n]/fMax,0)/6 + parecido(c,P)/100;
+}
+
+/* Entropía: cuánto promete descartar un intento (más alto = mejor) */
+function entropia(g, S){
+  const h = new Array(7).fill(0);
+  for(const s of S) h[inter(g,s)]++;
+  let e = 0; for(const x of h) if(x){ const p = x/S.length; e -= p*Math.log2(p); }
+  return e;
+}
+
+function elegirIntento(estrategia, clues, P){
+  const { posibles, muestra } = explorar(clues);
+  if(posibles===0) return { combo:null, posibles:0 };
+  if(posibles<=2) return { combo: muestra[0], posibles };
+  if(estrategia==="patrones" && posibles>300){
+    const best = muestra.reduce((b,c)=>{ const s = puntajePatron(c,P); return s>b.s?{c,s}:b; }, {c:null,s:-1});
+    return { combo: best.c, posibles };
+  }
+  // Máxima información: prueba candidatos posibles y también combinaciones
+  // "exploradoras" (aunque no puedan ser la respuesta) y escoge la que mejor
+  // reparte las posibilidades, para que cualquier respuesta descarte mucho.
+  const S = muestra.slice(0,2000);
+  const pool = [];
+  for(let i=0;i<150;i++) pool.push({ c: muestra[Math.floor(Math.random()*muestra.length)], posible:true });
+  if(posibles>50) for(let i=0;i<150;i++) pool.push({ c: comboAzar(), posible:false });
+  // Sondas: prueban varios números dudosos a la vez, rellenando con números ya descartados
+  const veces = new Array(MAX+1).fill(0); S.forEach(c=>c.forEach(n=>veces[n]++));
+  const dudosos = [], fuera = [];
+  for(let n=MIN;n<=MAX;n++){ if(veces[n]===0) fuera.push(n); else if(veces[n]<S.length) dudosos.push(n); }
+  const seguros = []; for(let n=MIN;n<=MAX;n++) if(veces[n]===S.length) seguros.push(n);
+  const relleno = [...fuera, ...seguros];
+  for(let i=0;i<200 && dudosos.length;i++){
+    const t = 1 + Math.floor(Math.random()*Math.min(6, dudosos.length));
+    const d = [...dudosos].sort(()=>Math.random()-0.5).slice(0,t);
+    const r = [...relleno].sort(()=>Math.random()-0.5).slice(0,6-t);
+    if(d.length+r.length===6) pool.push({ c:[...d,...r].sort((a,b)=>a-b), posible:false });
+  }
+  let best = null;
+  for(const g of pool){
+    const e = entropia(g.c,S) + (g.posible ? 0.05 : 0) + 0.001*puntajePatron(g.c,P);
+    if(!best || e>best.e) best = { c:g.c, e };
+  }
+  return { combo: best.c, posibles, bits: best.e };
+}
+function comboAzar(){
+  const a = []; for(let n=MIN;n<=MAX;n++) a.push(n);
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  return a.slice(0,6).sort((x,y)=>x-y);
+}
+
+/* ---------- Aprendizaje: qué estrategia le ha funcionado mejor ---------- */
+function estadisticas(){
+  const st = {};
+  memoria().forEach(m=>{
+    // Las partidas detenidas por pistas mal anotadas NO cuentan: el error fue del conteo, no de la estrategia
+    if(m.resultado==="error") return;
+    const e = st[m.estrategia] || (st[m.estrategia] = { partidas:0, ganadas:0, sumaIntentos:0 });
+    e.partidas++;
+    if(m.resultado==="ganó"){ e.ganadas++; e.sumaIntentos += m.intentos.length; }
+    else e.sumaIntentos += LIMITE + 5;   // perder cuenta como si hubiera necesitado más intentos que el límite
+  });
+  return st;
+}
+const MIN_PARTIDAS = 5;   // no cambia de estrategia con muy pocas partidas
+function estrategiaAuto(){
+  const st = estadisticas();
+  const prom = e => e && e.partidas ? e.sumaIntentos/e.partidas : null;
+  const pi = prom(st.informacion), pp = prom(st.patrones);
+  const ni = st.informacion ? st.informacion.partidas : 0, np = st.patrones ? st.patrones.partidas : 0;
+  if(ni < MIN_PARTIDAS || np < MIN_PARTIDAS)
+    return { e:"informacion", porque:`Usa "máxima información", que en las pruebas es la más rápida. Solo cambiaría si, con al menos ${MIN_PARTIDAS} partidas de cada estrategia, la otra le gana en promedio.` };
+  const mejor = pp < pi ? "patrones" : "informacion";
+  return { e: mejor, porque: `Elige "${mejor==="informacion"?"máxima información":"patrones"}" porque es la que menos intentos le toma en promedio (${Math.min(pi,pp).toFixed(1)}).` };
+}
+
+/* ---------- Lecciones de una partida ---------- */
+function lecciones(m){
+  const L = [];
+  const pasos = m.intentos.map((t,i)=>({ i:i+1, ...t, elim: t.posiblesAntes ? 1 - (t.posiblesDespues ?? 0)/t.posiblesAntes : 0 }));
+  const utiles = pasos.filter(p=>p.aciertos<6);
+  if(utiles.length){
+    const mejor = utiles.reduce((a,b)=>b.elim>a.elim?b:a), peor = utiles.reduce((a,b)=>b.elim<a.elim?b:a);
+    L.push(`✅ Lo que mejor funcionó: el intento ${mejor.i} descartó el ${(mejor.elim*100).toFixed(1)}% de lo que quedaba.`);
+    L.push(`⚠️ Lo que menos aportó: el intento ${peor.i} solo descartó el ${(peor.elim*100).toFixed(1)}%.`);
+    const flojos = utiles.filter(p=>p.elim<0.5).map(p=>p.i);
+    if(flojos.length) L.push(`❌ Intentos flojos (descartaron menos de la mitad): ${flojos.join(", ")}.`);
+  }
+  if(m.tipo) L.push(m.tipo==="envivo" ? "🎯 Fue una prueba en vivo: cuenta para medir cómo está funcionando." : "🏋️ Fue una partida de entrenamiento con un sorteo viejo.");
+  if(m.sinPistas!=null) L.push(`🔮 Sin pistas (intento 1) acertó ${m.sinPistas} de 6. Al azar se esperan 0.9.`);
+  if(m.parecidoAnterior) L.push(`🔁 El sorteo encontrado comparte ${m.parecidoAnterior.comunes} número(s) con el anterior (${m.parecidoAnterior.fecha}) y se le parece un ${m.parecidoAnterior.forma}% en forma.`);
+  if(m.resultado==="ganó") L.push(`🏁 La correcta salió en el intento ${m.intentos.length}.${m.guardadaEnHistorial?" Quedó guardada en el historial.":""}`);
+  if(m.resultado==="perdió") L.push(`🏁 Llegó al límite de ${LIMITE} intentos; quedaban ${fmt(m.quedaban||0)} combinaciones posibles.`);
+  (m.errores||[]).forEach(e=>L.push(`🛑 Error: ${e}`));
+  return L;
+}
+
+/* ---------- Partida en curso ---------- */
+let JUEGO = null;
+let ULTIMO_DIARIO = null;
+let ULTIMA_SP = null;
+const P_DES = () => aprender(historial());
+
+/* =========================================================
+   APRENDIZAJE DE LA PREDICCIÓN SIN PISTAS
+   Cada número recibe puntaje por 4 rasgos (frecuencia, recientes,
+   atraso y si salió en el sorteo anterior). El sistema prueba muchas
+   combinaciones de pesos contra TODOS los sorteos guardados (cada uno
+   predicho solo con los anteriores) y se queda con la que más acierta.
+   Se vuelve a entrenar sola cada vez que se guarda un sorteo nuevo.
+   ========================================================= */
+const RASGOS_PRED = ["frecuencia","recientes","atraso","anterior"];
+const NOMBRE_RASGO = { frecuencia:"más salen", recientes:"salieron hace poco", atraso:"llevan tiempo sin salir", anterior:"repiten del sorteo anterior" };
+const PESOS_PRED_DEF = { frecuencia:1, recientes:0.5, atraso:0, anterior:-0.5 };
+const CLAVE_PRED = "loto_pesos_pred_v1";
+let PRED = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_PRED)) || { pesos:{...PESOS_PRED_DEF}, info:null }; } catch(e){ return { pesos:{...PESOS_PRED_DEF}, info:null }; } })();
+function guardarPred(){ try { localStorage.setItem(CLAVE_PRED, JSON.stringify(PRED)); } catch(e){} }
+
+function rasgosNumeros(Hprev){
+  const F = {}; RASGOS_PRED.forEach(k=>F[k] = new Float32Array(MAX+1));
+  const n = Hprev.length; if(!n) return F;
+  Hprev.forEach(h=>h.nums.forEach(x=>F.frecuencia[x]++));
+  Hprev.slice(-10).forEach((h,i)=>h.nums.forEach(x=>F.recientes[x] += (i+1)/10));
+  for(let x=MIN;x<=MAX;x++){
+    let k = 0; for(let i=n-1;i>=0 && !Hprev[i].nums.includes(x);i--) k++;
+    F.atraso[x] = Math.min(k/(MAX/K), 3);
+  }
+  Hprev[n-1].nums.forEach(x=>F.anterior[x] = 1);
+  RASGOS_PRED.forEach(k=>{ const a = F[k]; let mx = 0; for(let x=MIN;x<=MAX;x++) mx = Math.max(mx, a[x]); if(mx>0) for(let x=MIN;x<=MAX;x++) a[x] /= mx; });
+  return F;
+}
+function puntosNumeros(F, w){
+  const s = new Float32Array(MAX+1);
+  for(let x=MIN;x<=MAX;x++){ let t = 0; for(const k of RASGOS_PRED) t += (w[k]||0)*F[k][x]; s[x] = t; }
+  return s;
+}
+function top6(s){ return [...Array(MAX).keys()].map(i=>i+1).sort((a,b)=>s[b]-s[a]).slice(0,6); }
+
+/* Entrena con todos los sorteos: los viejos para aprender, los más nuevos para comprobar */
+function aprenderPrediccion(){
+  const H = historial();
+  const casos = [];
+  for(let i=30;i<H.length;i++) casos.push({ F: rasgosNumeros(H.slice(0,i)), real: H[i].nums, fecha: H[i].fecha });
+  if(casos.length<20) return null;
+  const corte = Math.floor(casos.length*0.7);
+  const entreno = casos.slice(0,corte), prueba = casos.slice(corte);
+  const evalua = (w, lista) => lista.reduce((a,c)=>a + inter(top6(puntosNumeros(c.F,w)), c.real), 0)/lista.length;
+  const rnd = () => Math.round((Math.random()*4-2)*2)/2;
+  const candidatos = [{...PRED.pesos}, {...PESOS_PRED_DEF}];
+  for(let i=0;i<150;i++){ const w = {}; RASGOS_PRED.forEach(k=>w[k] = rnd()); candidatos.push(w); }
+  let mejor = null;
+  for(const w of candidatos){ const e = evalua(w, entreno); if(!mejor || e>mejor.e) mejor = { w, e }; }
+  const enPrueba = evalua(mejor.w, prueba);
+  // distribución de aciertos con los pesos aprendidos (en los sorteos de prueba)
+  const dist = [0,0,0,0,0,0,0];
+  prueba.forEach(c=>dist[inter(top6(puntosNumeros(c.F,mejor.w)), c.real)]++);
+  PRED = { pesos: mejor.w, info: { sorteos: casos.length, entreno: mejor.e, prueba: enPrueba, nPrueba: prueba.length, dist, fecha: new Date().toISOString().slice(0,10) } };
+  guardarPred();
+  return PRED;
+}
+
+function textoAprendizajePred(){
+  const I = PRED.info;
+  if(!I) return "🧠 Predicción sin pistas: todavía no ha entrenado.";
+  const w = PRED.pesos;
+  const orden = RASGOS_PRED.filter(k=>w[k]!==0).sort((a,b)=>Math.abs(w[b])-Math.abs(w[a]))
+    .map(k=>`${w[k]>0?"prefiere":"evita"} los que ${NOMBRE_RASGO[k]}`);
+  const d = I.dist.map((c,i)=>c?`${i}: ${c} vez/veces`:null).filter(Boolean).join(" · ");
+  return `🧠 <b>Predicción sin pistas aprendida</b> con ${I.sorteos} sorteos.<br>
+    En sorteos que usó para aprender acierta <b>${I.entreno.toFixed(2)}</b>; en los ${I.nPrueba} más nuevos, que no vio al aprender, acierta <b>${I.prueba.toFixed(2)}</b> (azar: 0.90).<br>
+    Lo que aprendió: ${orden.join(", ") || "nada claro"}.<br>
+    Aciertos en la prueba: ${d}.`;
+}
+
+/* =========================================================
+   DIARIO DE LA MÁQUINA
+   Observa sorteo tras sorteo, como quien estudia la rutina de una persona.
+   Para cada sorteo guardado anota qué habría sugerido cada método
+   (usando SOLO los sorteos anteriores) y cuántos acertó.
+   Luego le da más peso a los métodos que mejor le vienen funcionando
+   últimamente, y con eso arma la combinación sin pistas.
+   ========================================================= */
+const METODOS = {
+  calientes: "Los que más salen",
+  recientes: "Los que salieron hace poco",
+  atrasados: "Los que llevan tiempo sin salir",
+  arrastre:  "Los que suelen salir después del sorteo anterior"
+};
+const ALFA = 0.15;       // qué tan rápido se adapta a lo que pasa ahora
+const INICIO_DIARIO = 30;
+
+function normaliza(a){ let mx = 0; for(let x=MIN;x<=MAX;x++) mx = Math.max(mx, a[x]); const r = new Float32Array(MAX+1); if(mx>0) for(let x=MIN;x<=MAX;x++) r[x] = a[x]/mx; return r; }
+
+/* Recorre la historia una sola vez llevando la cuenta de todo */
+function construirDiario(H){
+  const freq = new Float32Array(MAX+1), ultimo = new Int32Array(MAX+1).fill(-1);
+  const T = Array.from({length:MAX+1},()=>new Float32Array(MAX+1)), salidas = new Float32Array(MAX+1);
+  const ewma = {}; Object.keys(METODOS).forEach(m=>ewma[m] = 0.9);
+  let ewmaComb = 0.9;
+  const filas = [];
+  const puntajes = (i) => {
+    const S = {};
+    S.calientes = normaliza(freq);
+    const r = new Float32Array(MAX+1); H.slice(Math.max(0,i-10), i).forEach((h,k,arr)=>h.nums.forEach(x=>r[x] += (k+1)/arr.length)); S.recientes = normaliza(r);
+    const at = new Float32Array(MAX+1); for(let x=MIN;x<=MAX;x++) at[x] = ultimo[x]<0 ? 3 : Math.min((i-1-ultimo[x])/(MAX/K), 3); S.atrasados = normaliza(at);
+    const mk = new Float32Array(MAX+1);
+    if(i>0) H[i-1].nums.forEach(a=>{ if(salidas[a]) for(let x=MIN;x<=MAX;x++) mk[x] += T[a][x]/salidas[a]; });
+    S.arrastre = normaliza(mk);
+    return S;
+  };
+  const pesosActuales = () => { const w = {}; let t = 0; Object.keys(METODOS).forEach(m=>{ w[m] = Math.max(0.05, ewma[m]) ** 3; t += w[m]; }); Object.keys(w).forEach(m=>w[m] /= t); return w; };
+  const combina = (S, w) => { const c = new Float32Array(MAX+1); Object.keys(METODOS).forEach(m=>{ for(let x=MIN;x<=MAX;x++) c[x] += w[m]*S[m][x]; }); return c; };
+
+  for(let i=0;i<H.length;i++){
+    if(i>=INICIO_DIARIO){
+      const S = puntajes(i), w = pesosActuales();
+      const fila = { fecha: H[i].fecha, real: H[i].nums, aciertos: {} };
+      Object.keys(METODOS).forEach(m=>{ fila.aciertos[m] = inter(top6(S[m]), H[i].nums); });
+      fila.combinado = inter(top6(combina(S, w)), H[i].nums);
+      fila.pesos = w;
+      filas.push(fila);
+      Object.keys(METODOS).forEach(m=>{ ewma[m] = (1-ALFA)*ewma[m] + ALFA*fila.aciertos[m]; });
+      ewmaComb = (1-ALFA)*ewmaComb + ALFA*fila.combinado;
+    }
+    // aprender de este sorteo para los siguientes
+    H[i].nums.forEach(x=>{ freq[x]++; ultimo[x] = i; });
+    if(i>0) H[i-1].nums.forEach(a=>{ salidas[a]++; H[i].nums.forEach(b=>T[a][b]++); });
+  }
+  const S = puntajes(H.length), w = pesosActuales();
+  return { filas, pesos: w, ewma: {...ewma}, ewmaComb, puntos: combina(S, w), S, T, salidas };
+}
+
+/* "Cuando sale el X, en el siguiente suele salir el Y" */
+function rutinas(D, nums){
+  return nums.map(a=>{
+    if(!D.salidas[a]) return null;
+    let mejor = 0, veces = 0;
+    for(let x=MIN;x<=MAX;x++) if(D.T[a][x]>veces){ veces = D.T[a][x]; mejor = x; }
+    return { a, sigue: mejor, veces, de: D.salidas[a] };
+  }).filter(Boolean);
+}
+
+function textoDiario(){
+  const H = historial(), D = construirDiario(H);
+  const F = D.filas; if(!F.length) return "";
+  const prom = (k, n) => { const L = F.slice(-n); return L.reduce((a,f)=>a + (k==="combinado" ? f.combinado : f.aciertos[k]), 0)/L.length; };
+  const orden = Object.keys(METODOS).sort((a,b)=>D.ewma[b]-D.ewma[a]);
+  const ult = H[H.length-1];
+  const rut = rutinas(D, ult.nums);
+  const tabla = F.slice(-10).reverse().map(f=>`<div class="row" style="flex-wrap:wrap"><span class="date">${f.fecha}</span>
+      <div class="balls">${f.real.map(n=>`<div class="ball">${n}</div>`).join("")}</div>
+      <div class="note" style="width:100%">${Object.keys(METODOS).map(m=>`${METODOS[m].split(" ").slice(-2).join(" ")}: ${f.aciertos[m]}`).join(" · ")} · <b>combinado: ${f.combinado}</b></div></div>`).join("");
+  return `
+    <div class="sub" style="margin-top:8px">📓 <b>Diario de la máquina</b> (${F.length} sorteos observados)</div>
+    <div class="note">Ahora mismo le funciona mejor: <b>${METODOS[orden[0]]}</b> (${D.ewma[orden[0]].toFixed(2)} aciertos recientes). Pesos que está usando: ${orden.map(m=>`${METODOS[m]} ${Math.round(D.pesos[m]*100)}%`).join(", ")}.</div>
+    <div class="note">Combinado (se ajusta solo): <b>${prom("combinado",20).toFixed(2)}</b> aciertos en los últimos 20 sorteos, <b>${prom("combinado",F.length).toFixed(2)}</b> en todos (azar: 0.90).</div>
+    <div class="note">Rutinas del último sorteo (${ult.fecha}): ${rut.map(r=>`cuando sale el ${r.a}, el siguiente trae el ${r.sigue} (${r.veces} de ${r.de} veces)`).join("; ")}.</div>
+    <details style="margin-top:6px"><summary class="note">Ver los últimos 10 sorteos del diario</summary>${tabla}</details>`;
+}
+
+/* Predicción SIN pistas: la mejor combinación según todo lo aprendido del historial */
+function prediccionSinPistas(P, fechaSorteo){
+  const { muestra } = explorar([], 4000);
+  // Solo puede usar los sorteos ANTERIORES a la fecha que se está adivinando
+  const todos = historial();
+  const H = fechaSorteo ? todos.filter(h=>h.fecha<fechaSorteo) : todos;
+  if(H.length<3) return muestra[0];   // casi sin sorteos anteriores: no hay de dónde aprender
+  P = aprender(H);
+  const ult = H.length ? H[H.length-1] : { nums: [] };
+  const DIA = construirDiario(H); const pts = DIA.puntos; ULTIMO_DIARIO = DIA;
+  let mn = Infinity, mx = -Infinity; for(let x=MIN;x<=MAX;x++){ mn = Math.min(mn, pts[x]); mx = Math.max(mx, pts[x]); }
+  const rango = (mx-mn) || 1;
+  // 1) las mejores según los pesos aprendidos, 2) desempate por forma típica
+  let best = null;
+  for(const c of muestra){
+    if(P.vistas.has(c.join("-"))) continue;
+    const s = c.reduce((a,x)=>a + (pts[x]-mn)/rango, 0)/6 + 1.0*parecido(c,P)/100;
+    if(!best || s>best.s) best = { c, s };
+  }
+  // además prueba directamente los 6 números de mejor puntaje si tienen buena forma
+  const t6 = top6(pts).sort((a,b)=>a-b);
+  if(!P.vistas.has(t6.join("-"))){
+    const s6 = t6.reduce((a,x)=>a + (pts[x]-mn)/rango, 0)/6 + 1.0*parecido(t6,P)/100;
+    if(s6>best.s) best = { c:t6, s:s6 };
+  }
+  return best.c;
+}
+
+function proponer(){
+  const clues = JUEGO.intentos.map(t=>({ combo:t.combo, aciertos:t.aciertos }));
+  if(clues.length===0){
+    JUEGO.propuesta = { combo: prediccionSinPistas(P_DES(), JUEGO.fechaSorteo), posiblesAntes: combinaciones(MAX,K), prediccion: true };
+    return;
+  }
+  const r = elegirIntento(JUEGO.estrategia, clues, P_DES());
+  if(r.posibles===0){
+    // ¿Qué intento, si estuviera mal, explicaría la contradicción?
+    JUEGO.sospechosos = clues.map((_,i)=>i).filter(i=> explorar(clues.filter((_,k)=>k!==i), 1).posibles>0 );
+    JUEGO.estado = "error";
+    JUEGO.errores.push("Las pistas se contradicen: ninguna combinación cumple todas. Probablemente algún conteo de aciertos está mal.");
+    terminar(); return;
+  }
+  JUEGO.propuesta = { combo: r.combo, posiblesAntes: r.posibles };
+}
+
+function terminar(){
+  const m = {
+    fecha: new Date().toISOString().slice(0,10),
+    objetivo: JUEGO.objetivo || "Sin nombre",
+    estrategia: JUEGO.estrategia,
+    resultado: JUEGO.estado,
+    intentos: JUEGO.intentos,
+    quedaban: JUEGO.quedaban,
+    errores: JUEGO.errores,
+    fechaSorteo: JUEGO.fechaSorteo || null,
+    tipo: JUEGO.tipo || "entrenamiento",
+    sinPistas: JUEGO.intentos.length ? JUEGO.intentos[0].aciertos : null
+  };
+  MEM_LOCAL.push(m); guardarMem();
+  // Si la encontró, la guarda sola en el historial de sorteos
+  if(m.resultado==="ganó"){
+    const c = m.intentos[m.intentos.length-1].combo;
+    const ant = historial().filter(h=> m.fechaSorteo ? h.fecha<m.fechaSorteo : true).pop();
+    if(ant && m.fechaSorteo){ const sm = similitud(c, ant.nums); m.parecidoAnterior = { fecha: ant.fecha, comunes: sm.comunes.length, forma: sm.forma }; guardarMem(); }
+  }
+  if(m.resultado==="ganó" && m.fechaSorteo){
+    const c = m.intentos[m.intentos.length-1].combo;
+    const ya = historial().some(h=>h.fecha===m.fechaSorteo);
+    if(!ya){ extra.push({ fecha: m.fechaSorteo, nums: [...c] }); guardarExtra(extra); PERFIL = pintar(); pintarBarraFecha(); m.guardadaEnHistorial = true; guardarMem();
+      setTimeout(()=>{ pintarAprendizaje(); }, 50); }
+  }
+  JUEGO.guardada = m;
+  pintarMemoria();
+}
+
+function enviarAciertos(){
+  const a = parseInt($("acDes").value);
+  if(isNaN(a) || a<0 || a>6){ $("msgDes").innerHTML = '<span class="bad">Escribe un número del 0 al 6.</span>'; return; }
+  const t = { combo: JUEGO.propuesta.combo, aciertos: a, posiblesAntes: JUEGO.propuesta.posiblesAntes };
+  JUEGO.intentos.push(t);
+  if(a===6){ t.posiblesDespues = 1; JUEGO.estado = "ganó"; terminar(); pintarJuego(); return; }
+  if(JUEGO.intentos.length>=LIMITE){
+    const r = explorar(JUEGO.intentos.map(x=>({combo:x.combo, aciertos:x.aciertos})), 1);
+    t.posiblesDespues = r.posibles; JUEGO.quedaban = r.posibles;
+    JUEGO.estado = r.posibles===0 ? "error" : "perdió";
+    if(r.posibles===0) JUEGO.errores.push("Las pistas se contradicen: algún conteo de aciertos está mal.");
+    terminar(); pintarJuego(); return;
+  }
+  proponer();
+  t.posiblesDespues = JUEGO.propuesta ? JUEGO.propuesta.posiblesAntes : 0;
+  pintarJuego();
+}
+
+function verificar(){
+  const real = parseNums($("realDes").value);
+  if(!real){ $("verDes").innerHTML = '<span class="bad">Deben ser 6 números distintos del 1 al 40.</span>'; return; }
+  const m = JUEGO.guardada, malos = [];
+  m.intentos.forEach((t,i)=>{ const v = inter(t.combo, real); if(v!==t.aciertos) malos.push(`la pista del intento ${i+1} estaba mal contada: se anotó ${t.aciertos}, eran ${v}`); });
+  m.errores = [...(m.errores||[]), ...malos];
+  guardarMem(); pintarMemoria(); pintarJuego();
+  $("verDes").innerHTML = malos.length
+    ? `<span class="bad">Encontré ${malos.length} pista(s) mal contada(s). Quedó registrado en la memoria.</span>`
+    : `<span class="ok">Todas las pistas estaban bien contadas.</span>`;
+}
+
+/* ---------- Confirmar la correcta con protección ---------- */
+let armado = null;
+function confirmarCorrecta(){
+  const R = realComp(), btn = $("btnSi");
+  if(R){
+    const k = JUEGO.propuesta.combo.filter(n=>R.includes(n)).length;
+    if(k<6){ $("msgDes").innerHTML = `<span class="bad">Según el sorteo real que pusiste, coinciden ${k}, no 6. No la marqué como correcta.</span>`; return; }
+  }
+  if(!armado){
+    btn.textContent = "⚠️ ¿Seguro? Toca otra vez para confirmar";
+    btn.style.background = "var(--warn)";
+    armado = setTimeout(()=>{ armado = null; if($("btnSi")){ $("btnSi").textContent = "✅ Sí, es la correcta"; $("btnSi").style.background = "var(--acc)"; } }, 3000);
+    return;
+  }
+  clearTimeout(armado); armado = null;
+  $("acDes").value = 6; enviarAciertos();
+}
+
+/* Si se marcó como correcta por error: reabre la partida y limpia lo guardado */
+function deshacerVictoria(){
+  const m = JUEGO.guardada;
+  const t = JUEGO.intentos.pop();
+  if(m){
+    MEM_LOCAL = MEM_LOCAL.filter(x=>x!==m); guardarMem();
+    if(m.guardadaEnHistorial && m.fechaSorteo){
+      extra = extra.filter(e=>!(e.fecha===m.fechaSorteo && e.nums.join()===[...t.combo].sort((a,b)=>a-b).join()));
+      guardarExtra(extra); PERFIL = pintar();
+    }
+    JUEGO.guardada = null;
+  }
+  JUEGO.estado = "jugando";
+  JUEGO.errores.push(`En el intento ${JUEGO.intentos.length+1} se marcó como correcta por error; se deshizo y no se guardó en el historial.`);
+  JUEGO.propuesta = { combo: t.combo, posiblesAntes: t.posiblesAntes, prediccion: JUEGO.intentos.length===0 };
+  pintarJuego();
+  $("msgDes").innerHTML = '<span class="ok">Listo, se deshizo. Escribe cuántos acertó de verdad esta combinación.</span>';
+}
+
+/* ---------- Fechas: en qué día estamos y qué tipo de partida es ---------- */
+const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+const fmtFecha = f => { const [a,m,d] = f.split("-"); return `${+d} ${MESES_C[+m-1]} ${a}`; };
+const ultimoSorteo = () => { const H = historial(); return H.length ? H[H.length-1].fecha : null; };
+// En vivo = sorteo más nuevo que todo lo guardado (lo que acaba de salir). Entrenamiento = sorteo viejo.
+function tipoPartida(fecha){
+  if(!fecha) return "entrenamiento";
+  const u = ultimoSorteo();
+  return (!u || fecha > u) ? "envivo" : "entrenamiento";
+}
+const ETIQUETA_TIPO = { entrenamiento: "🏋️ Entrenamiento (sorteo viejo)", envivo: "🎯 Prueba en vivo (sorteo nuevo)" };
+function pintarBarraFecha(){
+  const u = ultimoSorteo();
+  $("barraFecha").innerHTML = `📅 Hoy: <b>${fmtFecha(hoyISO())}</b> · Último sorteo guardado: <b>${u ? fmtFecha(u) : "ninguno"}</b>`;
+}
+
+/* ---------- Corregir errores sin perder la partida ---------- */
+function reabrir(){
+  // quita de la memoria la partida que se había cerrado por error
+  if(JUEGO.guardada){ MEM_LOCAL = MEM_LOCAL.filter(m=>m!==JUEGO.guardada); guardarMem(); JUEGO.guardada = null; }
+  JUEGO.estado = "jugando"; JUEGO.sospechosos = null;
+  JUEGO.errores = JUEGO.errores.filter(e=>!e.startsWith("Las pistas se contradicen"));
+}
+function deshacer(){
+  const t = JUEGO.intentos.pop();
+  JUEGO.errores.push(`Se deshizo el intento ${JUEGO.intentos.length+1} (se había anotado ${t.aciertos}).`);
+  JUEGO.propuesta = { combo: t.combo, posiblesAntes: t.posiblesAntes, prediccion: JUEGO.intentos.length===0 };
+  pintarJuego();
+}
+function recalcularConteos(){
+  const T = JUEGO.intentos;
+  for(let i=0;i<T.length;i++){
+    T[i].posiblesAntes = i===0 ? combinaciones(MAX,K) : explorar(T.slice(0,i).map(x=>({combo:x.combo, aciertos:x.aciertos})), 1).posibles;
+    if(i>0) T[i-1].posiblesDespues = T[i].posiblesAntes;
+  }
+}
+function corregir(){
+  const i = parseInt($("fixN").value), a = parseInt($("fixA").value);
+  if(isNaN(a) || a<0 || a>5){ $("fixMsg").innerHTML = '<span class="bad">Escribe un número del 0 al 5.</span>'; return; }
+  const viejo = JUEGO.intentos[i].aciertos;
+  JUEGO.intentos[i].aciertos = a;
+  reabrir();
+  JUEGO.errores.push(`El intento ${i+1} estaba mal contado: se anotó ${viejo}, eran ${a}. Se corrigió y siguió la partida.`);
+  $("juego").innerHTML = '<div class="note">Recalculando…</div>';
+  setTimeout(()=>{
+    recalcularConteos();
+    proponer();
+    if(JUEGO.estado==="jugando"){
+      const ult = JUEGO.intentos[JUEGO.intentos.length-1];
+      if(ult) ult.posiblesDespues = JUEGO.propuesta.posiblesAntes;
+    }
+    pintarJuego();
+  }, 30);
+}
+
+/* ---------- Sorteo real para comparar (solo en pantalla, nunca llega al sistema) ---------- */
+const realComp = () => parseNums($("realComp").value);
+function bolasComparadas(combo, clase){
+  const R = realComp();
+  return combo.map(n=>`<div class="ball ${clase} ${R && R.includes(n) ? "match" : ""}">${n}</div>`).join("");
+}
+function textoCoinciden(combo){
+  const R = realComp(); if(!R) return "";
+  const k = combo.filter(n=>R.includes(n)).length;
+  return k===6 ? `<div class="coinc ok"><b>🎉 ¡Coinciden los 6! Es la correcta: confírmala.</b></div>`
+               : `<div class="coinc" style="color:#facc15">Coinciden ${k} de 6 con el sorteo real (marcados en amarillo).</div>`;
+}
+
+/* ---------- Pantalla ---------- */
+function pintarAprendizaje(){
+  const st = estadisticas(), a = estrategiaAuto();
+  const fila = (k,n) => { const e = st[k]; return e ? `${n}: ${e.partidas} partida(s), ${e.ganadas} ganada(s), promedio ${(e.sumaIntentos/e.partidas).toFixed(1)} intentos` : `${n}: sin partidas`; };
+  const ganadas = memoria().filter(m=>m.sinPistas!=null && m.resultado==="ganó");
+  const spV = ganadas.filter(m=>m.tipo==="envivo").map(m=>m.sinPistas);
+  const spE = ganadas.filter(m=>m.tipo!=="envivo").map(m=>m.sinPistas);
+  const resumenSP = a => a.length ? `${a.length} partida(s), promedio <b>${(a.reduce((x,y)=>x+y,0)/a.length).toFixed(2)}</b>, mejor ${Math.max(...a)}` : "sin partidas todavía";
+  const sp = memoria().filter(m=>m.sinPistas!=null).map(m=>m.sinPistas);
+  const spTxt = sp.length ? `${sp.length} partida(s), promedio <b>${(sp.reduce((a,b)=>a+b,0)/sp.length).toFixed(2)}</b> aciertos de 6 (azar: 0.90), mejor: ${Math.max(...sp)}` : "sin datos";
+  $("aprendizaje").innerHTML = `<b>Lo que ha aprendido:</b><br>${fila("patrones","Patrones")}<br>${fila("informacion","Máxima información")}<br>
+    🔮 <b>Sin pistas en tus partidas:</b> ${spTxt}<br>
+    &nbsp;&nbsp;🏋️ Entrenamiento: ${resumenSP(spE)}<br>
+    &nbsp;&nbsp;🎯 <b>En vivo (lo que de verdad mide):</b> ${resumenSP(spV)} (azar: 0.90)<br><i>${a.porque}</i>${textoDiario()}`;
+}
+
+function pintarJuego(){
+  const J = JUEGO, box = $("juego");
+  if(!J){ box.innerHTML = ""; return; }
+  const filas = J.intentos.map((t,i)=>{
+    const elim = t.posiblesAntes ? (1-(t.posiblesDespues??0)/t.posiblesAntes)*100 : 0;
+    return `<div class="row" style="flex-wrap:wrap"><span class="date">#${i+1}</span>
+      <div class="balls">${t.combo.map(n=>`<div class="ball">${n}</div>`).join("")}</div>
+      <div class="score"><b class="${t.aciertos>=3?'ok':''}">${t.aciertos}/6</b><br>${t.aciertos<6?`−${elim.toFixed(0)}%`:''}</div></div>`;
+  }).join("");
+  let cuerpo = "";
+  if(J.estado==="jugando"){
+    cuerpo = `
+      <div class="grid" style="margin-bottom:8px">
+        <div class="stat"><b>${J.intentos.length+1} / ${LIMITE}</b><span>Intento</span></div>
+        <div class="stat"><b class="ok">${fmt(J.propuesta.posiblesAntes)}</b><span>Combinaciones posibles</span></div></div>
+      <div class="note" style="margin-bottom:6px">${ETIQUETA_TIPO[J.tipo||"entrenamiento"]}${J.fechaSorteo?` · ${fmtFecha(J.fechaSorteo)}`:""} · Estrategia: ${J.estrategia==="informacion"?"máxima información":"patrones"}</div>
+      <div class="sub">${J.propuesta.prediccion ? "🔮 Predicción sin pistas:" : J.propuesta.posiblesAntes===1 ? "Solo queda una combinación posible. ¿Es esta la correcta?" : "Propuesta del sistema:"}</div>
+      <div class="balls" style="margin:8px 0">${bolasComparadas(J.propuesta.combo, "hot")}</div>
+      ${textoCoinciden(J.propuesta.combo)}
+      <label for="acDes">¿Cuántos números acertó?</label>
+      <div class="flex"><input id="acDes" type="number" min="0" max="6" inputmode="numeric" placeholder="0 a 6">
+        <button id="btnAc" style="width:auto;min-width:110px">Enviar</button></div>
+      <div style="margin-top:8px"><button id="btnSi" style="background:var(--acc);color:#04210f">✅ Sí, es la correcta</button></div>
+      ${J.intentos.length?`<div style="margin-top:8px"><button id="btnUndo" class="small sec">↩️ Me equivoqué en el último: deshacer</button></div>`:""}
+      <div id="msgDes" class="note" style="margin-top:6px"></div>`;
+  } else {
+    const titulo = J.estado==="ganó" ? `<b class="ok">🏆 ¡La encontró en ${J.intentos.length} intentos!</b>`
+                 : J.estado==="perdió" ? `<b class="bad">Se acabaron los ${LIMITE} intentos.</b>`
+                 : `<b class="bad">Partida detenida: las pistas se contradicen.</b>`;
+    const sosp = (J.estado==="error" && J.sospechosos && J.sospechosos.length) ? `
+      <div class="card" style="background:#11141a;margin:8px 0">
+        <div class="sub">Intentos que pudieron quedar mal contados:</div>
+        ${J.sospechosos.map(i=>`<div class="row"><span class="date">#${i+1}</span>
+          <div class="balls">${J.intentos[i].combo.map(n=>`<div class="ball">${n}</div>`).join("")}</div>
+          <div class="score">anotado ${J.intentos[i].aciertos}</div></div>`).join("")}
+        <label for="fixN">Intento a corregir</label>
+        <select id="fixN" style="background:#11141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%">
+          ${J.sospechosos.map(i=>`<option value="${i}">Intento #${i+1}</option>`).join("")}</select>
+        <label for="fixA">Aciertos correctos</label>
+        <div class="flex"><input id="fixA" type="number" min="0" max="6" inputmode="numeric" placeholder="0 a 6">
+          <button id="btnFix" style="width:auto;min-width:130px">Corregir y seguir</button></div>
+        <div id="fixMsg" class="note"></div>
+      </div>` : "";
+    const noEra = J.estado==="ganó" ? `<div style="margin:8px 0"><button id="btnNoEra" class="sec">↩️ No era la correcta: deshacer</button></div>` : "";
+    cuerpo = `<div style="margin-bottom:8px">${titulo}</div>${noEra}${typeof sosp!=="undefined"?sosp:""}
+      <div class="note">${lecciones(J.guardada).join("<br>")}</div>
+      <label for="realDes">Opcional: escribe la combinación real para revisar si alguna pista estaba mal contada</label>
+      <div class="flex"><input id="realDes" type="text" inputmode="decimal" placeholder="Ej: 7,13,25,26,31,40">
+        <button id="btnVer" class="sec" style="width:auto;min-width:110px">Revisar</button></div>
+      <div id="verDes" class="note" style="margin-top:6px"></div>`;
+  }
+  box.innerHTML = cuerpo + (filas ? `<div class="sub" style="margin-top:10px">Intentos de esta partida:</div>${filas}` : "");
+  if($("btnAc")){ $("btnAc").onclick = enviarAciertos; }
+  if($("btnSi")) $("btnSi").onclick = confirmarCorrecta;
+  if($("btnNoEra")) $("btnNoEra").onclick = deshacerVictoria;
+  if($("btnVer")) $("btnVer").onclick = verificar;
+  if($("btnUndo")) $("btnUndo").onclick = deshacer;
+  if($("btnFix")) $("btnFix").onclick = corregir;
+}
+
+function pintarMemoria(){
+  const M = memoria();
+  $("memCount").textContent = M.length;
+  $("memoria").innerHTML = M.length ? [...M].reverse().map(m=>`
+    <details style="border-bottom:1px solid var(--line);padding:6px 0">
+      <summary>${m.fecha} · ${m.objetivo} · <span class="${m.resultado==="ganó"?'ok':'bad'}">${m.resultado}</span> en ${m.intentos.length} intentos (${m.estrategia==="informacion"?"máx. información":"patrones"})</summary>
+      <div class="note" style="margin:6px 0">${lecciones(m).join("<br>")}</div>
+      ${m.intentos.map((t,i)=>`<div class="row"><span class="date">#${i+1}</span><div class="balls">${t.combo.map(n=>`<div class="ball">${n}</div>`).join("")}</div><div class="score"><b>${t.aciertos}/6</b></div></div>`).join("")}
+    </details>`).join("") : `<div class="note">Todavía no hay partidas.</div>`;
+  pintarAprendizaje();
+}
+
+function iniciarDesafio(){
+  $("limiteTxt").textContent = LIMITE;
+  pintarMemoria();
+
+  $("btnNueva").onclick = ()=>{
+    const f = $("fechaDes").value;
+    if(f && f > hoyISO()){ $("juego").innerHTML = '<div class="bad">Esa fecha todavía no ha llegado: no hay sorteo real para buscar. Para esa fecha usa 🔮 Sin pistas.</div>'; return; }
+    const sel = $("estrategia").value;
+    const est = sel==="auto" ? estrategiaAuto().e : sel;
+    JUEGO = { estrategia: est, objetivo: $("objetivo").value.trim() || ($("fechaDes").value ? "Sorteo "+$("fechaDes").value : ""), fechaSorteo: $("fechaDes").value || null, tipo: tipoPartida($("fechaDes").value || null), intentos: [], errores: [], estado: "jugando" };
+    $("sinPistasRes").innerHTML = ""; ULTIMA_SP = null;
+    $("juego").innerHTML = '<div class="note">Pensando el primer intento…</div>';
+    setTimeout(()=>{ proponer(); pintarJuego(); }, 30);
+  };
+
+  $("realComp").addEventListener("input", ()=>{
+    if(JUEGO && JUEGO.estado==="jugando") pintarJuego();
+    if(ULTIMA_SP){
+      const box = $("sinPistasRes"), balls = box.querySelector(".balls");
+      if(balls){ balls.innerHTML = bolasComparadas(ULTIMA_SP.c, "hot"); const old = box.querySelector(".coinc"); if(old) old.remove(); balls.insertAdjacentHTML("afterend", textoCoinciden(ULTIMA_SP.c)); }
+    }
+  });
+
+  $("btnSinPistas").onclick = ()=>{
+    const f = $("fechaDes").value || null;
+    const box = $("sinPistasRes");
+    box.innerHTML = '<div class="note">Pensando…</div>';
+    setTimeout(()=>{
+      const c = prediccionSinPistas(P_DES(), f);
+      ULTIMA_SP = { c, f };
+      const n = f ? historial().filter(h=>h.fecha<f).length : historial().length;
+      box.innerHTML = `<div class="sub">🔮 Combinación sin pistas ${f ? `para el ${fmtFecha(f)}${tipoPartida(f)==="envivo" ? " (sorteo nuevo)" : " (sorteo viejo)"}` : "para el próximo sorteo"}:</div>
+        <div class="balls" style="margin:8px 0">${bolasComparadas(c, "hot")}</div>${textoCoinciden(c)}
+        <div class="note">${n<3 ? "Casi no hay sorteos anteriores a esa fecha, así que esta sale al azar." : `Hecha con lo que sabe de ${n} sorteos anteriores.`}${ULTIMO_DIARIO && n>=INICIO_DIARIO ? ` Ahora le funciona mejor: ${METODOS[Object.keys(METODOS).sort((a,b)=>ULTIMO_DIARIO.ewma[b]-ULTIMO_DIARIO.ewma[a])[0]].toLowerCase()}.` : ""}</div>`;
+    }, 30);
+  };
+
+  const textoMemoria = () => JSON.stringify({ partidas: MEM_LOCAL, sorteosAgregados: extra });
+  $("btnCopiarMem").onclick = ()=>{
+    const txt = textoMemoria(), ta = $("memTxt"), msg = $("memMsg");
+    ta.style.display = "block"; ta.value = txt;
+    ta.focus(); ta.select(); ta.setSelectionRange(0, txt.length);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch(e){}
+    const n = MEM_LOCAL.length, m = extra.length;
+    const base = `${n} partida(s) y ${m} sorteo(s) agregado(s).`;
+    if(ok){ msg.innerHTML = `<span class="ok">✅ Copiado: ${base}</span> Pégalo en el chat.`; return; }
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(txt).then(()=>{ msg.innerHTML = `<span class="ok">✅ Copiado: ${base}</span> Pégalo en el chat.`; },
+        ()=>{ msg.innerHTML = `${base} No se pudo copiar solo: mantén el dedo sobre el texto de abajo, toca "Seleccionar todo" y "Copiar".`; });
+    } else {
+      msg.innerHTML = `${base} No se pudo copiar solo: mantén el dedo sobre el texto de abajo, toca "Seleccionar todo" y "Copiar". O usa "⬇️ Descargar".`;
+    }
+  };
+  $("btnBajarMem").onclick = ()=>{
+    try {
+      const blob = new Blob([textoMemoria()], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `memoria-loto-${new Date().toISOString().slice(0,10)}.txt`;
+      document.body.appendChild(a); a.click(); a.remove();
+      $("memMsg").innerHTML = '<span class="ok">Descargado.</span> Mándame ese archivo .txt por aquí con el botón +.';
+    } catch(e){ $("memMsg").textContent = "No se pudo descargar en este navegador."; }
+  };
+
+  $("btnCmp").onclick = ()=>{
+    const A = parseNums($("cmpA").value), B = parseNums($("cmpB").value);
+    if(!A || !B){ $("cmpRes").innerHTML = '<span class="bad">Cada una debe tener 6 números distintos del 1 al 40.</span>'; return; }
+    const s = similitud(A,B);
+    $("cmpRes").innerHTML = `<div class="grid">
+      <div class="stat"><b class="ok">${s.total}%</b><span>Similitud total</span></div>
+      <div class="stat"><b>${s.comunes.length} de 6</b><span>En común: ${s.comunes.join(", ")||"ninguno"}</span></div>
+      <div class="stat"><b>${s.forma}%</b><span>Misma forma (suma, pares, bajos…)</span></div></div>`;
+  };
+}
+
+/* =========================================================
+   CALENDARIO DE RUEDA (día · mes · año)
+   ========================================================= */
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const MESES_C = ["ene","feb","mar","abr","may","jun","jul","ago","sept","oct","nov","dic"];
+const ANO_MIN = 1995, ANO_MAX = new Date().getFullYear() + 1;
+const ALTO = 60;
+function llenarRueda(el, items){
+  el.innerHTML = '<div class="pad"></div>' + items.map(t=>`<div>${t}</div>`).join("") + '<div class="pad"></div>';
+}
+function indiceRueda(el){ return Math.round(el.scrollTop/ALTO); }
+function irA(el, i, suave){ el.scrollTo({ top: i*ALTO, behavior: suave ? "smooth" : "auto" }); marcar(el); }
+function marcar(el){
+  const i = indiceRueda(el), hijos = el.children;
+  for(let k=1;k<hijos.length-1;k++) hijos[k].classList.toggle("sel", k-1===i);
+}
+function diasDelMes(m, a){ return new Date(a, m+1, 0).getDate(); }
+function iniciarCalendario(){
+  const wD = $("wDia"), wM = $("wMes"), wA = $("wAno");
+  llenarRueda(wD, [...Array(31).keys()].map(i=>i+1));
+  llenarRueda(wM, MESES);
+  const anos = []; for(let a=ANO_MIN;a<=ANO_MAX;a++) anos.push(a);
+  llenarRueda(wA, anos);
+  [wD,wM,wA].forEach(w=>{
+    let t; w.addEventListener("scroll", ()=>{ marcar(w); clearTimeout(t); t = setTimeout(()=>{ ajustarDia(); irA(w, indiceRueda(w), true); }, 120); });
+  });
+  function ajustarDia(){
+    const max = diasDelMes(indiceRueda(wM), ANO_MIN + indiceRueda(wA));
+    if(indiceRueda(wD) > max-1) irA(wD, max-1, true);
+  }
+  function abrir(){
+    const v = $("fechaDes").value;
+    const d = v ? new Date(v+"T12:00:00") : new Date(hoyISO()+"T12:00:00");
+    $("picker").classList.add("on");
+    requestAnimationFrame(()=>{ irA(wD, d.getDate()-1); irA(wM, d.getMonth()); irA(wA, Math.min(Math.max(d.getFullYear(),ANO_MIN),ANO_MAX)-ANO_MIN); });
+  }
+  function cerrar(){ $("picker").classList.remove("on"); }
+  $("fechaBtn").onclick = abrir;
+  $("pCancel").onclick = cerrar;
+  $("picker").onclick = e=>{ if(e.target.id==="picker") cerrar(); };
+  $("pBorrar").onclick = ()=>{ $("fechaDes").value = ""; $("fechaBtn").textContent = "📅 Elegir fecha"; cerrar(); };
+  $("pOk").onclick = ()=>{
+    const a = ANO_MIN + indiceRueda(wA), m = indiceRueda(wM);
+    const d = Math.min(indiceRueda(wD)+1, diasDelMes(m,a));
+    $("fechaDes").value = `${a}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    $("fechaBtn").textContent = `📅 ${d} ${MESES_C[m]} ${a}`;
+    cerrar();
+  };
+}
+
+let PERFIL = pintar();
+iniciarDesafio();
+pintarBarraFecha();
+iniciarCalendario();
+
+$("btnGen").onclick = () => {
+  const res = generar(1, PERFIL, $("usarFrecuencia").checked);
+  $("generadas").innerHTML = res.map(r=>{
+    const t = rasgos(r.c);
+    return `<div class="row" style="flex-wrap:wrap">
+      <div class="balls">${bolas(r.c, PERFIL)}</div>
+      <div class="score"><b class="ok">${r.sc}%</b><br>parecido</div>
+      <div style="width:100%"><span class="tag">Suma ${t.suma}</span><span class="tag">${t.pares} pares</span><span class="tag">${t.bajos} bajos</span><span class="tag">${t.consecutivos} consecutivos</span></div>
+    </div>${htmlParecidas(r.c, historial())}`;
+  }).join("") || `<div class="note">No se encontraron combinaciones; intenta de nuevo.</div>`;
+};
+
+$("nuevaFecha").valueAsDate = new Date();
+$("btnAdd").onclick = () => {
+  const fecha = $("nuevaFecha").value;
+  const nums = $("nuevosNums").value.split(/[\s,;.\-]+/).filter(Boolean).map(Number);
+  const msg = $("addMsg");
+  const unicos = new Set(nums);
+  if(!fecha){ msg.innerHTML = '<span class="bad">Pon la fecha.</span>'; return; }
+  if(nums.length!==6 || unicos.size!==6 || nums.some(n=>!Number.isInteger(n)||n<MIN||n>MAX)){
+    msg.innerHTML = '<span class="bad">Deben ser 6 números distintos del 1 al 40.</span>'; return;
+  }
+  extra.push({ fecha, nums: nums.sort((a,b)=>a-b) });
+  guardarExtra(extra);
+  $("nuevosNums").value = "";
+  msg.innerHTML = '<span class="ok">Sorteo agregado. El generador ya lo tiene en cuenta.</span>';
+  PERFIL = pintar();
+};
+
+function borrar(fecha, numsTxt){
+  extra = extra.filter(e=>!(e.fecha===fecha && e.nums.join()===numsTxt));
+  guardarExtra(extra);
+  PERFIL = pintar();
+}
+</script>
+</body>
+</html>
