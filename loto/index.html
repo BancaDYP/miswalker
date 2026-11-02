@@ -82,6 +82,8 @@
       <button id="btnNueva">🎯 Con pistas</button>
       <button id="btnSinPistas" style="background:var(--acc);color:#04210f">🔮 Sin pistas</button>
     </div>
+    <div style="margin-top:8px"><button id="btnAuto" style="background:#8b5cf6">🤖 Buscar solo (usa el sorteo real de arriba)</button></div>
+    <div id="autoMsg" class="note" style="margin-top:6px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
     <div id="juego" style="margin-top:10px"></div>
   </section>
@@ -1643,6 +1645,28 @@ function textoCoinciden(combo){
                : `<div class="coinc" style="color:#facc15">Coinciden ${k} de 6 con el sorteo real (marcados en amarillo).</div>`;
 }
 
+/* ---------- Búsqueda automática ----------
+   La app hace de "tú": compara cada propuesta con el sorteo real y le pasa al
+   buscador SOLO cuántos números coincidieron. El buscador nunca ve cuáles. */
+let AUTO = false;
+function pasoAuto(){
+  if(!AUTO) return;
+  if(!JUEGO || JUEGO.estado!=="jugando" || !JUEGO.propuesta){ AUTO = false; $("autoMsg").innerHTML = JUEGO && JUEGO.estado==="ganó" ? `<span class="ok">🤖 ¡Listo! La encontró solo en ${JUEGO.intentos.length} intentos.</span>` : ""; return; }
+  const R = realComp(); if(!R){ AUTO = false; return; }
+  const k = JUEGO.propuesta.combo.filter(n=>R.includes(n)).length;
+  $("autoMsg").innerHTML = `🤖 Intento ${JUEGO.intentos.length+1}: coinciden ${k}. ${k<6 ? "Buscando otra…" : ""}`;
+  $("acDes").value = k;
+  enviarAciertos();
+  setTimeout(pasoAuto, 450);
+}
+function iniciarAuto(){
+  const R = realComp();
+  if(!R){ $("autoMsg").innerHTML = '<span class="bad">Primero escribe arriba el sorteo real con sus 6 números.</span>'; return; }
+  AUTO = true; $("autoMsg").innerHTML = "🤖 Empezando…";
+  $("btnNueva").click();
+  setTimeout(()=>{ if(!JUEGO || JUEGO.estado!=="jugando"){ AUTO = false; $("autoMsg").innerHTML = ""; return; } pasoAuto(); }, 400);
+}
+
 /* ---------- Pantalla ---------- */
 function pintarAprendizaje(){
   if(!$("avanzado").open) return;
@@ -1666,7 +1690,7 @@ function pintarJuego(){
   const filas = J.intentos.map((t,i)=>{
     const elim = t.posiblesAntes ? (1-(t.posiblesDespues??0)/t.posiblesAntes)*100 : 0;
     return `<div class="row" style="flex-wrap:wrap"><span class="date">#${i+1}</span>
-      <div class="balls">${t.combo.map(n=>`<div class="ball">${n}</div>`).join("")}</div>
+      <div class="balls">${bolasComparadas(t.combo, "")}</div>
       <div class="score"><b class="${t.aciertos>=3?'ok':''}">${t.aciertos}/6</b><br>${t.aciertos<6?`−${elim.toFixed(0)}%`:''}</div></div>`;
   }).join("");
   let cuerpo = "";
@@ -1749,7 +1773,7 @@ function iniciarDesafio(){
         <b style="color:var(--warn)">⚠️ El sorteo del ${fmtFecha(f)} ya está guardado.</b>
         <div class="note" style="margin-top:4px">${jugada ? `Ya lo jugaste y lo encontró en ${jugada.intentos.length} intentos.` : "Ya estaba en el historial."} No se va a contar otra vez para no repetir datos.</div>
         <div style="margin-top:8px"><button id="btnPractica" class="sec">Jugar de práctica (no se guarda)</button></div></div>`;
-      $("btnPractica").onclick = ()=>{ window.__practica = true; $("btnNueva").click(); };
+      $("btnPractica").onclick = ()=>{ const eraAuto = AUTO; window.__practica = true; $("btnNueva").click(); if(eraAuto){ AUTO = true; setTimeout(pasoAuto, 400); } };
       return;
     }
     if(f && f > hoyISO()){ $("juego").innerHTML = '<div class="bad">Esa fecha todavía no ha llegado: no hay sorteo real para buscar. Para esa fecha usa 🔮 Sin pistas.</div>'; return; }
@@ -1779,6 +1803,8 @@ function iniciarDesafio(){
       if(balls){ balls.innerHTML = bolasComparadas(ULTIMA_SP.c, "hot"); const old = box.querySelector(".coinc"); if(old) old.remove(); balls.insertAdjacentHTML("afterend", textoCoinciden(ULTIMA_SP.c)); }
     }
   });
+
+  $("btnAuto").onclick = iniciarAuto;
 
   $("btnSinPistas").onclick = ()=>{
     const f = $("fechaDes").value || null;
