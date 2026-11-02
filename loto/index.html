@@ -1096,6 +1096,7 @@ function porQueNumeros(f, c){
       return { n, txt: m.p<=10 ? `${nombreCorto[m.k]} (#${m.p})` : "por la forma" }; });
   } catch(e){ return c.map(n=>({ n, txt:"" })); }
 }
+const yaProbadas = f => new Set((REPS[f]||[]).map(x=>[...x.combo].sort((a,b)=>a-b).join("-")));
 function registrarRepeticion(f, c){
   const real = realDeFecha(f); if(!f || !real) return;
   const ac = c.filter(n=>real.includes(n));
@@ -1113,6 +1114,7 @@ function htmlRepeticiones(f){
       ${x.cuales.length ? `<div class="note" style="width:100%">Acertó ${x.porque.map(p=>`${p.n} (${p.txt})`).join(", ")}</div>` : ""}</div>`).join("");
   return `<div class="card" style="background:#11141a;margin-top:10px">
     <div class="sub">🔁 <b>Intentos con este mismo sorteo: ${L.length}</b></div>
+    <div class="note">Las combinaciones que ya probó quedan descartadas: no te las vuelve a dar.</div>
     <div class="note">Mejor: <b>${mejor} de 6</b> · Promedio: ${prom.toFixed(2)} (azar 0.90) · Veces → ${dist.map((c,i)=>c?`${i}: ${c}`:null).filter(Boolean).join(" · ")}</div>
     <div class="flex" style="margin-top:6px"><button id="btnRep10" class="small sec">🔁 Generar 10 más</button><button id="btnRepBorrar" class="small sec">🗑️ Borrar estos intentos</button></div>
     ${filas}${L.length>15?`<div class="note">(Se muestran los últimos 15.)</div>`:""}</div>`;
@@ -1412,7 +1414,8 @@ function textoDetector(){
 }
 
 /* Predicción SIN pistas: la mejor combinación según todo lo aprendido del historial */
-function prediccionSinPistas(P, fechaSorteo){
+function prediccionSinPistas(P, fechaSorteo, excluir){
+  excluir = excluir || new Set();
   const { muestra } = explorar([], 4000);
   // Solo puede usar los sorteos ANTERIORES a la fecha que se está adivinando
   const todos = historial();
@@ -1429,13 +1432,13 @@ function prediccionSinPistas(P, fechaSorteo){
   // 1) las mejores según los pesos aprendidos, 2) desempate por forma típica
   let best = null;
   for(const c of muestra){
-    if(P.vistas.has(c.join("-"))) continue;
+    if(P.vistas.has(c.join("-")) || excluir.has(c.join("-"))) continue;
     const s = c.reduce((a,x)=>a + (pts[x]-mn)/rango, 0)/6 + 1.0*parecido(c,P)/100;
     if(!best || s>best.s) best = { c, s };
   }
   // además prueba directamente los 6 números de mejor puntaje si tienen buena forma
   const t6 = top6(pts).sort((a,b)=>a-b);
-  if(!P.vistas.has(t6.join("-"))){
+  if(!P.vistas.has(t6.join("-")) && !excluir.has(t6.join("-"))){
     const s6 = t6.reduce((a,x)=>a + (pts[x]-mn)/rango, 0)/6 + 1.0*parecido(t6,P)/100;
     if(s6>best.s) best = { c:t6, s:s6 };
   }
@@ -1786,7 +1789,7 @@ function iniciarDesafio(){
       const nueva = !!window.__otraSP; window.__otraSP = false;
       let c, yaEstaba = false;
       if(PREDS[clave] && !nueva){ c = PREDS[clave].combo; yaEstaba = true; }
-      else { c = prediccionSinPistas(P_DES(), f); PREDS[clave] = { combo: c, creada: hoyISO() }; guardarPreds(); registrarRepeticion(f, c); }
+      else { c = prediccionSinPistas(P_DES(), f, yaProbadas(f)); PREDS[clave] = { combo: c, creada: hoyISO() }; guardarPreds(); registrarRepeticion(f, c); }
       ULTIMA_SP = { c, f };
       const n = f ? historial().filter(h=>h.fecha<f).length : historial().length;
       box.innerHTML = `<div class="sub">🔮 Combinación sin pistas ${f ? `para el ${fmtFecha(f)}${tipoPartida(f)==="envivo" ? " (sorteo nuevo)" : " (sorteo viejo)"}` : "para el próximo sorteo"}:</div>
@@ -1802,7 +1805,7 @@ function iniciarDesafio(){
       if(f && realDeFecha(f)){
         box.insertAdjacentHTML("beforeend", htmlRepeticiones(f) || `<div class="note" style="margin-top:6px">🔁 Toca "🔄 Generar otra" para seguir intentando con este mismo sorteo: cada intento queda guardado con sus aciertos.</div>`);
         if($("btnRep10")) $("btnRep10").onclick = ()=>{ box.insertAdjacentHTML("beforeend",'<div class="note">Generando…</div>');
-          setTimeout(()=>{ for(let i=0;i<10;i++){ const cc = prediccionSinPistas(P_DES(), f); registrarRepeticion(f, cc); PREDS[f] = { combo: cc, creada: hoyISO() }; } guardarPreds(); $("btnSinPistas").click(); }, 30); };
+          setTimeout(()=>{ for(let i=0;i<10;i++){ const cc = prediccionSinPistas(P_DES(), f, yaProbadas(f)); registrarRepeticion(f, cc); PREDS[f] = { combo: cc, creada: hoyISO() }; } guardarPreds(); $("btnSinPistas").click(); }, 30); };
         if($("btnRepBorrar")) $("btnRepBorrar").onclick = ()=>{ delete REPS[f]; guardarReps(); $("btnSinPistas").click(); };
       } else if(f) {
         box.insertAdjacentHTML("beforeend", `<div class="note" style="margin-top:6px">Para guardar cuántos acierta cada intento, escribe el sorteo real arriba (o usa una fecha que ya esté guardada).</div>`);
