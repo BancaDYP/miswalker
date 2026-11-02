@@ -84,6 +84,8 @@
     </div>
     <div style="margin-top:8px"><button id="btnAuto" style="background:#8b5cf6">🤖 Buscar solo (usa el sorteo real de arriba)</button></div>
     <div id="autoMsg" class="note" style="margin-top:6px"></div>
+    <div style="margin-top:8px"><button id="btnCorrida" style="background:#0ea5e9">🎲 Corrida sin pistas (no le dice nada, para solo con los 6)</button></div>
+    <div id="corridaBox" style="margin-top:8px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
     <div id="juego" style="margin-top:10px"></div>
   </section>
@@ -1645,6 +1647,88 @@ function textoCoinciden(combo){
                : `<div class="coinc" style="color:#facc15">Coinciden ${k} de 6 con el sorteo real (marcados en amarillo).</div>`;
 }
 
+/* =========================================================
+   CORRIDA SIN PISTAS
+   El robot NO recibe nada: tira combinaciones solo según sus datos
+   (los métodos del diario), sin repetir ninguna. La app anota en
+   silencio cuántos coincidieron y se detiene solo con los 6.
+   ========================================================= */
+const BIN = (()=>{ const b = Array.from({length:MAX+1},()=>new Array(K+1).fill(0)); for(let n=0;n<=MAX;n++){ b[n][0]=1; for(let k=1;k<=Math.min(n,K);k++) b[n][k] = b[n-1][k-1] + (k<=n-1 ? b[n-1][k] : 0); } return b; })();
+const rangoCombo = c => { let r = 0; for(let i=0;i<K;i++) r += (c[i]-1 >= i+1 ? BIN[c[i]-1][i+1] : 0); return r; };   // c ordenada
+let CORRIDA = null;
+const CLAVE_CORRIDAS = "loto_corridas_v1";
+let CORRIDAS = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_CORRIDAS)) || {}; } catch(e){ return {}; } })();
+function guardarCorridas(){ try { localStorage.setItem(CLAVE_CORRIDAS, JSON.stringify(CORRIDAS)); } catch(e){} }
+
+function iniciarCorrida(){
+  const f = $("fechaDes").value || null, real = realComp();
+  if(!real){ $("corridaBox").innerHTML = '<span class="bad">Escribe arriba el sorteo real con sus 6 números: la app lo usa solo para anotar los aciertos y saber cuándo parar.</span>'; return; }
+  const H = f ? historial().filter(h=>h.fecha<f) : historial();
+  const pts = H.length>=3 ? construirDiario(H).puntos : new Float32Array(MAX+1);
+  let mn = Infinity, mx = -Infinity; for(let x=MIN;x<=MAX;x++){ mn = Math.min(mn, pts[x]); mx = Math.max(mx, pts[x]); }
+  const w = new Float64Array(MAX+1); for(let x=MIN;x<=MAX;x++) w[x] = 1 + 2*((pts[x]-mn)/((mx-mn)||1));   // todos posibles; los de mejor puntaje, más seguido
+  const { R } = H.length>=3 ? rangos(f) : { R:null };
+  CORRIDA = { f, real, w, R, visto: new Uint8Array(Math.ceil(combinaciones(MAX,K)/8)+1), intentos: 0, dist: [0,0,0,0,0,0,0],
+              mejores: [], porNumero: new Array(MAX+1).fill(0), metodos: { calientes:0, recientes:0, atrasados:0, arrastre:0, forma:0 },
+              inicio: Date.now(), corriendo: true, encontrada: null, ultimoPintado: 0 };
+  $("corridaBox").innerHTML = `<div id="corridaDatos"></div><div style="margin-top:8px"><button id="btnPararCorrida" class="sec">⏹️ Detener</button></div>`;
+  $("btnPararCorrida").onclick = ()=>{ if(CORRIDA) CORRIDA.corriendo = false; };
+  pasoCorrida();
+}
+function tirarCombo(w){
+  const usados = new Set(); let tot = 0; for(let x=MIN;x<=MAX;x++) tot += w[x];
+  const c = [];
+  while(c.length<K){ let r = Math.random()*tot, x = MIN; for(;x<=MAX;x++){ if(usados.has(x)) continue; r -= w[x]; if(r<=0) break; } if(x>MAX) x = MAX; if(usados.has(x)) continue; usados.add(x); tot -= w[x]; c.push(x); }
+  return c.sort((a,b)=>a-b);
+}
+function pasoCorrida(){
+  const C = CORRIDA; if(!C) return;
+  if(!C.corriendo){ if(!C.finalizada){ C.finalizada = true; terminarCorrida(); } return; }
+  const t0 = performance.now();
+  while(performance.now()-t0 < 120){
+    const c = tirarCombo(C.w), r = rangoCombo(c), byte = r>>3, bit = 1<<(r&7);
+    if(C.visto[byte] & bit) continue;            // ya la probó: no la repite
+    C.visto[byte] |= bit; C.intentos++;
+    const ac = c.filter(n=>C.real.includes(n)); C.dist[ac.length]++;
+    if(ac.length>=3){
+      ac.forEach(n=>{ C.porNumero[n]++;
+        if(C.R){ const m = Object.keys(METODOS).filter(k=>C.R[k][n]<=10); if(m.length) m.forEach(k=>C.metodos[k]++); else C.metodos.forma++; } });
+      if(ac.length>=4){ C.mejores.push({ combo:c, aciertos:ac.length, intento:C.intentos }); if(C.mejores.length>40){ C.mejores.sort((a,b)=>b.aciertos-a.aciertos); C.mejores.length = 30; } }
+    }
+    if(ac.length===6){ C.encontrada = c; C.corriendo = false; break; }
+  }
+  if(Date.now()-C.ultimoPintado > 500){ C.ultimoPintado = Date.now(); pintarCorrida(); }
+  setTimeout(pasoCorrida, 0);
+}
+function terminarCorrida(){
+  const C = CORRIDA; if(!C) return;
+  const seg = (Date.now()-C.inicio)/1000;
+  const reg = { fecha: hoyISO(), encontrada: !!C.encontrada, intentos: C.intentos, segundos: Math.round(seg), dist: C.dist,
+    mejores: [...C.mejores].sort((a,b)=>b.aciertos-a.aciertos).slice(0,30),
+    numerosEnAciertos3omas: Object.fromEntries(C.porNumero.map((v,n)=>[n,v]).filter(([n,v])=>v>0)), metodos: C.metodos };
+  if(C.f){ (CORRIDAS[C.f] = CORRIDAS[C.f] || []).push(reg); guardarCorridas(); }
+  pintarCorrida(true);
+}
+function pintarCorrida(final){
+  const C = CORRIDA, box = $("corridaDatos") || $("corridaBox"); if(!C){ box.innerHTML = ""; return; }
+  if(final && $("btnPararCorrida")) $("btnPararCorrida").parentElement.remove();
+  const seg = Math.max(1,(Date.now()-C.inicio)/1000), vel = Math.round(C.intentos/seg);
+  const top = [...C.mejores].sort((a,b)=>b.aciertos-a.aciertos).slice(0,8);
+  const numTop = C.porNumero.map((v,n)=>({n,v})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,6);
+  const totM = Object.values(C.metodos).reduce((a,b)=>a+b,0) || 1;
+  box.innerHTML = `<div class="card" style="background:#11141a">
+    <div class="sub">🎲 <b>Corrida sin pistas</b> ${C.f?`· ${fmtFecha(C.f)}`:""} ${C.corriendo?`<span class="note">(corriendo… ${vel.toLocaleString("es-DO")} por segundo)</span>`:""}</div>
+    ${C.encontrada ? `<div class="ok" style="margin:6px 0"><b>🎯 ¡Coincidieron los 6 en el intento ${C.intentos.toLocaleString("es-DO")}!</b></div><div class="balls">${C.encontrada.map(n=>`<div class="ball match">${n}</div>`).join("")}</div>` : (final ? `<div class="note" style="margin:6px 0">⏹️ Detenida sin llegar a los 6.</div>` : "")}
+    <div class="grid" style="margin-top:8px">
+      <div class="stat"><b>${C.intentos.toLocaleString("es-DO")}</b><span>Combinaciones probadas (sin repetir)</span></div>
+      <div class="stat"><b>${Math.round(seg)} s</b><span>Tiempo</span></div></div>
+    <div class="note" style="margin-top:6px">Veces que acertó → ${C.dist.map((v,i)=>`${i}: ${v.toLocaleString("es-DO")}`).join(" · ")}</div>
+    ${numTop.length ? `<div class="note">Números que más aparecieron en los intentos de 3 o más: ${numTop.map(x=>`${x.n} (${x.v})`).join(", ")}</div>` : ""}
+    ${C.R && totM>1 ? `<div class="note">En esos aciertos, el número venía de: ${Object.keys(C.metodos).map(k=>`${k==="forma"?"la forma / azar":nombreCorto[k]} ${Math.round(C.metodos[k]/totM*100)}%`).join(" · ")}</div>` : ""}
+    ${top.length ? `<div class="sub" style="margin-top:6px">Mejores intentos:</div>${top.map(x=>`<div class="row"><span class="date">#${x.intento.toLocaleString("es-DO")}</span><div class="balls">${x.combo.map(n=>`<div class="ball ${C.real.includes(n)?'match':''}">${n}</div>`).join("")}</div><div class="score"><b class="ok">${x.aciertos}/6</b></div></div>`).join("")}` : ""}
+  </div>`;
+}
+
 /* ---------- Búsqueda automática ----------
    La app hace de "tú": compara cada propuesta con el sorteo real y le pasa al
    buscador SOLO cuántos números coincidieron. El buscador nunca ve cuáles. */
@@ -1805,6 +1889,7 @@ function iniciarDesafio(){
   });
 
   $("btnAuto").onclick = iniciarAuto;
+  $("btnCorrida").onclick = ()=>{ if(CORRIDA && CORRIDA.corriendo) return; iniciarCorrida(); };
 
   $("btnSinPistas").onclick = ()=>{
     const f = $("fechaDes").value || null;
@@ -1868,7 +1953,7 @@ function iniciarDesafio(){
         sinPistasEntrenamiento: prom(ganadas.filter(m=>m.tipo!=="envivo").map(m=>m.sinPistas)),
         sinPistasEnVivo: prom(ganadas.filter(m=>m.tipo==="envivo").map(m=>m.sinPistas))
       },
-      partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS
+      partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS, corridas: CORRIDAS
     };
     const txt = JSON.stringify(reporte), ta = $("repTxt");
     ta.style.display = "block"; ta.value = txt; ta.focus(); ta.select(); ta.setSelectionRange(0, txt.length);
