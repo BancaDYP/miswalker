@@ -998,6 +998,10 @@ function lecciones(m){
 
 /* ---------- Partida en curso ---------- */
 let JUEGO = null;
+/* Combinaciones sin pistas que ya generaste (la que juegas antes del sorteo) */
+const CLAVE_PREDS = "loto_predicciones_v1";
+let PREDS = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_PREDS)) || {}; } catch(e){ return {}; } })();
+function guardarPreds(){ try { localStorage.setItem(CLAVE_PREDS, JSON.stringify(PREDS)); } catch(e){} }
 let ULTIMO_DIARIO = null;
 let ULTIMA_SP = null;
 const P_DES = () => aprender(historial());
@@ -1196,6 +1200,27 @@ function textoExplicacion(e){
   L.push(`🧭 Cada método solo habría acertado: ${Object.keys(METODOS).map(k=>`${nombreCorto[k]} ${e.propios[k]}`).join(" · ")} (de 6).`);
   return L;
 }
+function tableroProgreso(){
+  const P = memoria().filter(m=>m.resultado==="ganó" && m.sinPistas!=null);
+  if(P.length<3) return "";
+  const ventana = (arr,i,n) => { const a = arr.slice(Math.max(0,i-n+1), i+1); return a.reduce((x,y)=>x+y,0)/a.length; };
+  const prim = P.map(m=>m.sinPistas), ints = P.map(m=>m.intentos.length);
+  const W = 300, H = 70, n = P.length;
+  const linea = (arr, max, color) => arr.map((v,i)=>`${(i/(n-1||1)*W).toFixed(1)},${(H - ventana(arr,i,10)/max*H).toFixed(1)}`).join(" ");
+  const ref = (v,max,color,txt) => `<line x1="0" x2="${W}" y1="${H-v/max*H}" y2="${H-v/max*H}" stroke="${color}" stroke-dasharray="4 4" stroke-width="1"/><text x="${W-2}" y="${H-v/max*H-3}" fill="${color}" font-size="9" text-anchor="end">${txt}</text>`;
+  const ult = arr => ventana(arr, arr.length-1, 10);
+  const dist = [0,0,0,0,0,0,0]; prim.forEach(v=>dist[v]++);
+  return `<div class="sub" style="margin-top:8px">📈 <b>Progreso</b> (${n} partidas, promedio de las últimas 10)</div>
+    <div class="note">Aciertos en el intento 1: <b>${ult(prim).toFixed(2)}</b> (azar 0.90) · Intentos para encontrarla: <b>${ult(ints).toFixed(1)}</b></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:80px;background:#11141a;border-radius:8px;margin-top:4px">
+      ${ref(0.9,3,"#9aa3b2","azar 0.9")}<polyline fill="none" stroke="#22c55e" stroke-width="2" points="${linea(prim,3)}"/></svg>
+    <div class="note">Verde: aciertos del intento 1 (escala 0 a 3).</div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:80px;background:#11141a;border-radius:8px;margin-top:4px">
+      ${ref(12,20,"#9aa3b2","≈12 mínimo realista")}<polyline fill="none" stroke="#3b82f6" stroke-width="2" points="${linea(ints,20)}"/></svg>
+    <div class="note">Azul: intentos por partida (escala 0 a 20).</div>
+    <div class="note">Veces que acertó en el intento 1 → ${dist.map((c,i)=>c?`${i}: ${c}`:null).filter(Boolean).join(" · ")}</div>`;
+}
+
 function registroLoQueFunciona(){
   const P = memoria().filter(m=>m.resultado==="ganó" && m.explicacion && m.explicacion.previos>=10);
   if(!P.length) return "";
@@ -1243,7 +1268,10 @@ function prediccionSinPistas(P, fechaSorteo){
 function proponer(){
   const clues = JUEGO.intentos.map(t=>({ combo:t.combo, aciertos:t.aciertos }));
   if(clues.length===0){
-    JUEGO.propuesta = { combo: prediccionSinPistas(P_DES(), JUEGO.fechaSorteo), posiblesAntes: combinaciones(MAX,K), prediccion: true };
+    let guardada = JUEGO.fechaSorteo && PREDS[JUEGO.fechaSorteo];
+    if(!guardada && JUEGO.tipo==="envivo" && PREDS.proximo) guardada = PREDS.proximo;
+    JUEGO.usoGuardada = !!guardada;
+    JUEGO.propuesta = { combo: guardada ? [...guardada.combo] : prediccionSinPistas(P_DES(), JUEGO.fechaSorteo), posiblesAntes: combinaciones(MAX,K), prediccion: true };
     return;
   }
   const r = elegirIntento(JUEGO.estrategia, clues, P_DES());
@@ -1274,7 +1302,9 @@ function terminar(){
     tipo: JUEGO.tipo || "entrenamiento",
     sinPistas: JUEGO.intentos.length ? JUEGO.intentos[0].aciertos : null
   };
+  m.jugadaAntes = !!JUEGO.usoGuardada;
   MEM_LOCAL.push(m); guardarMem();
+  if(m.tipo==="envivo" && PREDS.proximo){ delete PREDS.proximo; guardarPreds(); }
   // Si la encontró, la guarda sola en el historial de sorteos
   if(m.resultado==="ganó"){
     const c = m.intentos[m.intentos.length-1].combo;
@@ -1442,7 +1472,7 @@ function pintarAprendizaje(){
   $("aprendizaje").innerHTML = `<b>Lo que ha aprendido:</b><br>${fila("patrones","Patrones")}<br>${fila("informacion","Máxima información")}<br>
     🔮 <b>Sin pistas en tus partidas:</b> ${spTxt}<br>
     &nbsp;&nbsp;🏋️ Entrenamiento: ${resumenSP(spE)}<br>
-    &nbsp;&nbsp;🎯 <b>En vivo (lo que de verdad mide):</b> ${resumenSP(spV)} (azar: 0.90)<br><i>${a.porque}</i>${registroLoQueFunciona()}${textoDiario()}`;
+    &nbsp;&nbsp;🎯 <b>En vivo (lo que de verdad mide):</b> ${resumenSP(spV)} (azar: 0.90)<br><i>${a.porque}</i>${tableroProgreso()}${registroLoQueFunciona()}${textoDiario()}`;
 }
 
 function pintarJuego(){
@@ -1461,7 +1491,7 @@ function pintarJuego(){
         <div class="stat"><b>${J.intentos.length+1} / ${LIMITE}</b><span>Intento</span></div>
         <div class="stat"><b class="ok">${fmt(J.propuesta.posiblesAntes)}</b><span>Combinaciones posibles</span></div></div>
       <div class="note" style="margin-bottom:6px">${J.practica ? "🧪 Práctica (no se guarda) · " : ""}${ETIQUETA_TIPO[J.tipo||"entrenamiento"]}${J.fechaSorteo?` · ${fmtFecha(J.fechaSorteo)}`:""} · Estrategia: ${J.estrategia==="informacion"?"máxima información":"patrones"}</div>
-      <div class="sub">${J.propuesta.prediccion ? "🔮 Predicción sin pistas:" : J.propuesta.posiblesAntes===1 ? "Solo queda una combinación posible. ¿Es esta la correcta?" : "Propuesta del sistema:"}</div>
+      <div class="sub">${J.propuesta.prediccion ? (J.usoGuardada ? "🔮 La combinación que generaste antes del sorteo:" : "🔮 Predicción sin pistas:") : J.propuesta.posiblesAntes===1 ? "Solo queda una combinación posible. ¿Es esta la correcta?" : "Propuesta del sistema:"}</div>
       <div class="balls" style="margin:8px 0">${bolasComparadas(J.propuesta.combo, "hot")}</div>
       ${textoCoinciden(J.propuesta.combo)}
       <label for="acDes">¿Cuántos números acertó?</label>
@@ -1557,12 +1587,19 @@ function iniciarDesafio(){
     const box = $("sinPistasRes");
     box.innerHTML = '<div class="note">Pensando…</div>';
     setTimeout(()=>{
-      const c = prediccionSinPistas(P_DES(), f);
+      const clave = f || "proximo";
+      const nueva = !!window.__otraSP; window.__otraSP = false;
+      let c, yaEstaba = false;
+      if(PREDS[clave] && !nueva){ c = PREDS[clave].combo; yaEstaba = true; }
+      else { c = prediccionSinPistas(P_DES(), f); PREDS[clave] = { combo: c, creada: hoyISO() }; guardarPreds(); }
       ULTIMA_SP = { c, f };
       const n = f ? historial().filter(h=>h.fecha<f).length : historial().length;
       box.innerHTML = `<div class="sub">🔮 Combinación sin pistas ${f ? `para el ${fmtFecha(f)}${tipoPartida(f)==="envivo" ? " (sorteo nuevo)" : " (sorteo viejo)"}` : "para el próximo sorteo"}:</div>
         <div class="balls" style="margin:8px 0">${bolasComparadas(c, "hot")}</div>${textoCoinciden(c)}
+        ${yaEstaba ? `<div class="note" style="color:var(--warn)">Es la misma que ya habías generado para esta fecha (${fmtFecha(PREDS[clave].creada)}). Así la partida con pistas empieza con la que jugaste.</div>` : `<div class="note ok">Guardada: cuando juegues esta fecha con pistas, el intento 1 será esta misma combinación.</div>`}
+        <div style="margin-top:6px"><button id="btnOtraSP" class="small sec">🔄 Generar otra</button></div>
         <div class="note">${n<3 ? "Casi no hay sorteos anteriores a esa fecha, así que esta sale al azar." : `Hecha con lo que sabe de ${n} sorteos anteriores.`}${ULTIMO_DIARIO && n>=INICIO_DIARIO ? ` Ahora le funciona mejor: ${METODOS[Object.keys(METODOS).sort((a,b)=>ULTIMO_DIARIO.ewma[b]-ULTIMO_DIARIO.ewma[a])[0]].toLowerCase()}.` : ""}</div>`;
+      $("btnOtraSP").onclick = ()=>{ window.__otraSP = true; $("btnSinPistas").click(); };
     }, 30);
   };
 
