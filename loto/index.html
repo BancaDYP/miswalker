@@ -86,6 +86,8 @@
     <div id="autoMsg" class="note" style="margin-top:6px"></div>
     <div style="margin-top:8px"><button id="btnCorrida" style="background:#0ea5e9">🎲 Corrida sin pistas (no le dice nada, para solo con los 6)</button></div>
     <div id="corridaBox" style="margin-top:8px"></div>
+    <div style="margin-top:8px"><button id="btnSim" style="background:#334155">🌙 Simulador: el robot juega solo todos los sorteos guardados</button></div>
+    <div id="simBox" style="margin-top:8px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
     <div id="juego" style="margin-top:10px"></div>
   </section>
@@ -1238,7 +1240,7 @@ function construirDiario(H){
     S.arrastre = normaliza(mk);
     return S;
   };
-  const pesosActuales = () => { const w = {}; let t = 0; Object.keys(METODOS).forEach(m=>{ w[m] = Math.max(0.05, ewma[m]) ** 3; t += w[m]; }); Object.keys(w).forEach(m=>w[m] /= t); return w; };
+  const pesosActuales = () => { const w = {}; let t = 0; Object.keys(METODOS).forEach(m=>{ w[m] = Math.max(0.05, ewma[m]) ** 3 * ((typeof PRIOR!=="undefined" && PRIOR && PRIOR.pesos[m]) || 1); t += w[m]; }); Object.keys(w).forEach(m=>w[m] /= t); return w; };
   const combina = (S, w) => { const c = new Float32Array(MAX+1); Object.keys(METODOS).forEach(m=>{ for(let x=MIN;x<=MAX;x++) c[x] += w[m]*S[m][x]; }); return c; };
 
   for(let i=0;i<H.length;i++){
@@ -1729,6 +1731,108 @@ function pintarCorrida(final){
   </div>`;
 }
 
+/* =========================================================
+   SIMULADOR: el robot juega solo todos los sorteos guardados
+   Para cada sorteo (en orden, usando solo los anteriores) juega una
+   partida con pistas como las tuyas: la app le dice SOLO cuántos
+   coincidieron. Al terminar, como ya se sabe el sorteo, revisa cuáles
+   eran los aciertos de cada paso y qué método los tenía arriba.
+   No toca tu memoria ni tu historial. Guarda su progreso solo.
+   ========================================================= */
+const CLAVE_SIM = "loto_simulador_v1", CLAVE_PRIOR = "loto_prior_v1";
+let SIM = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_SIM)) || null; } catch(e){ return null; } })();
+let PRIOR = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_PRIOR)) || null; } catch(e){ return null; } })();
+function guardarSim(){ try { localStorage.setItem(CLAVE_SIM, JSON.stringify(SIM)); } catch(e){} }
+let SIM_CORRIENDO = false;
+
+function simularSorteo(idx){
+  const TODO = historial(), objetivo = TODO[idx], real = objetivo.nums, f = objetivo.fecha;
+  const H = TODO.slice(0, idx), P = aprender(H.length>=5 ? H : TODO);
+  const { R } = rangos(f);
+  const pasos = [], clues = [];
+  let combo = prediccionSinPistas(P, f);
+  for(let n=0; n<25; n++){
+    const ac = combo.filter(x=>real.includes(x));
+    pasos.push({ combo, aciertos: ac.length, cuales: ac });
+    if(ac.length===6) break;
+    clues.push({ combo, aciertos: ac.length });
+    const r = elegirIntento("informacion", clues, P);
+    if(!r.combo) break;
+    combo = r.combo;
+  }
+  // ¿Qué método tenía arriba (top 10) cada número real?
+  const cobertura = {}; Object.keys(METODOS).forEach(k=>{ cobertura[k] = real.filter(x=>R[k][x]<=10).length; });
+  const primerCon = k => { const i = pasos.findIndex(p=>p.aciertos>=k); return i<0 ? null : i+1; };
+  return { fecha: f, real, intentos: pasos.length, encontrada: pasos[pasos.length-1].aciertos===6,
+           primero: { aciertos: pasos[0].aciertos, cuales: pasos[0].cuales }, llego3: primerCon(3), llego4: primerCon(4),
+           cobertura, pasos: pasos.map(p=>[p.combo.join("-"), p.aciertos]) };
+}
+function iniciarSimulador(reiniciar){
+  const TODO = historial();
+  const idxs = []; for(let i=10;i<TODO.length;i++) idxs.push(i);
+  if(reiniciar || !SIM || SIM.total!==idxs.length) SIM = { creado: new Date().toISOString(), total: idxs.length, hechos: 0, resultados: [], segundos: 0 };
+  SIM_CORRIENDO = true; pintarSimulador();
+  const paso = ()=>{
+    if(!SIM_CORRIENDO){ guardarSim(); pintarSimulador(); return; }
+    if(SIM.hechos>=SIM.total){ SIM_CORRIENDO = false; SIM.terminado = new Date().toISOString(); guardarSim(); aplicarAprendizajeSim(); pintarSimulador(); return; }
+    const t0 = performance.now();
+    try { SIM.resultados.push(simularSorteo(idxs[SIM.hechos])); } catch(e){ SIM.resultados.push({ error: String(e) }); }
+    SIM.hechos++; SIM.segundos += (performance.now()-t0)/1000;
+    if(SIM.hechos % 5 === 0) guardarSim();
+    pintarSimulador();
+    setTimeout(paso, 0);
+  };
+  setTimeout(paso, 30);
+}
+function resumenSim(){
+  const R = (SIM && SIM.resultados || []).filter(r=>!r.error);
+  if(!R.length) return null;
+  const n = R.length, prom = a => a.reduce((x,y)=>x+y,0)/(a.length||1);
+  const dist = [0,0,0,0,0,0,0]; R.forEach(r=>dist[r.primero.aciertos]++);
+  const azar = [0.3504,0.4350,0.1812,0.0312,0.0022,0.00006,0.0000003];
+  const cob = {}; Object.keys(METODOS).forEach(k=>{
+    const v = R.map(r=>r.cobertura[k]); const m = prom(v);
+    // cada número real tiene 10/40 de probabilidad de estar en un top 10 → 6×0.25 = 1.5 esperado
+    const sd = Math.sqrt(6*0.25*0.75*(34/39)); cob[k] = { prom: m, z: (m-1.5)/(sd/Math.sqrt(n)) };
+  });
+  return { n, intentos: prom(R.map(r=>r.intentos)), primero: prom(R.map(r=>r.primero.aciertos)), dist, azar,
+           llego3: prom(R.filter(r=>r.llego3).map(r=>r.llego3)), llego4: prom(R.filter(r=>r.llego4).map(r=>r.llego4)), cob };
+}
+function aplicarAprendizajeSim(){
+  const S = resumenSim(); if(!S || S.n<50) return;
+  const prior = {}; let alguno = false;
+  Object.keys(METODOS).forEach(k=>{ const z = S.cob[k].z; prior[k] = z>=2.5 ? 1.6 : z<=-2.5 ? 0.6 : 1; if(prior[k]!==1) alguno = true; });
+  PRIOR = alguno ? { pesos: prior, desde: new Date().toISOString(), n: S.n } : null;
+  try { if(PRIOR) localStorage.setItem(CLAVE_PRIOR, JSON.stringify(PRIOR)); else localStorage.removeItem(CLAVE_PRIOR); } catch(e){}
+}
+function pintarSimulador(){
+  const box = $("simBox"); if(!box) return;
+  const S = resumenSim();
+  const prog = SIM ? `${SIM.hechos} de ${SIM.total} sorteos` : "";
+  const quedan = SIM && SIM.hechos ? Math.round((SIM.segundos/SIM.hechos)*(SIM.total-SIM.hechos)) : null;
+  let html = `<div class="card" style="background:#11141a">
+    <div class="sub">🌙 <b>Simulador</b> ${prog ? `· ${prog}` : ""} ${SIM_CORRIENDO ? `<span class="note">(jugando… faltan unos ${quedan!=null ? Math.ceil(quedan/60) : "?"} min)</span>` : ""}</div>`;
+  if(S){
+    const fila = (k,txt) => `${txt} <b>${S.cob[k].prom.toFixed(2)}</b> ${Math.abs(S.cob[k].z)>=2.5 ? (S.cob[k].z>0 ? "✅ mejor que el azar" : "❌ peor que el azar") : "(como el azar)"}`;
+    html += `
+      <div class="note" style="margin-top:6px">Intentos promedio para encontrarla: <b>${S.intentos.toFixed(1)}</b> · Llegó a 3 aciertos en el intento ${S.llego3.toFixed(1)} y a 4 en el ${S.llego4.toFixed(1)} (promedios).</div>
+      <div class="note">Aciertos en el intento 1 (sin pistas): <b>${S.primero.toFixed(2)}</b> (azar 0.90)</div>
+      <div class="note">Veces → ${S.dist.map((v,i)=>v||i<4?`${i}: ${v} (azar ${Math.round(S.azar[i]*S.n)})`:null).filter(Boolean).join(" · ")}</div>
+      <div class="sub" style="margin-top:6px">¿Dónde tuvo razón cada método?</div>
+      <div class="note">De los 6 números de cada sorteo, cuántos tenía cada método entre sus 10 favoritos (por azar serían 1.50):<br>
+        ${fila("calientes","Los que más salen:")}<br>${fila("recientes","Salieron hace poco:")}<br>${fila("atrasados","Atrasados:")}<br>${fila("arrastre","Arrastre:")}</div>
+      <div class="note">${PRIOR ? `🧠 Aprendido y aplicado a la predicción: ${Object.keys(PRIOR.pesos).filter(k=>PRIOR.pesos[k]!==1).map(k=>`${nombreCorto[k]} ×${PRIOR.pesos[k]}`).join(", ")}.` : (SIM && SIM.terminado ? "🧠 Ningún método se separó del azar lo suficiente: la predicción no se cambió." : "")}</div>`;
+  }
+  html += `<div class="flex" style="margin-top:8px">
+      ${SIM_CORRIENDO ? `<button id="btnSimPausa" class="sec">⏸️ Pausar</button>` : `<button id="btnSimSeguir">${SIM && SIM.hechos && SIM.hechos<SIM.total ? "▶️ Seguir" : "▶️ Empezar"}</button>`}
+      ${!SIM_CORRIENDO && SIM && SIM.hechos ? `<button id="btnSimOtra" class="sec">🔁 Otra vuelta</button>` : ""}</div>
+    <div class="note">No toca tu memoria ni tu historial. Si cierras la página, sigue donde quedó cuando vuelvas a tocar "Seguir".</div></div>`;
+  box.innerHTML = html;
+  if($("btnSimPausa")) $("btnSimPausa").onclick = ()=>{ SIM_CORRIENDO = false; };
+  if($("btnSimSeguir")) $("btnSimSeguir").onclick = ()=>iniciarSimulador(false);
+  if($("btnSimOtra")) $("btnSimOtra").onclick = ()=>iniciarSimulador(true);
+}
+
 /* ---------- Búsqueda automática ----------
    La app hace de "tú": compara cada propuesta con el sorteo real y le pasa al
    buscador SOLO cuántos números coincidieron. El buscador nunca ve cuáles. */
@@ -1889,6 +1993,7 @@ function iniciarDesafio(){
   });
 
   $("btnAuto").onclick = iniciarAuto;
+  $("btnSim").onclick = ()=>{ if($("simBox").innerHTML) { $("simBox").innerHTML = ""; return; } pintarSimulador(); };
   $("btnCorrida").onclick = ()=>{ if(CORRIDA && CORRIDA.corriendo) return; iniciarCorrida(); };
 
   $("btnSinPistas").onclick = ()=>{
@@ -1953,7 +2058,8 @@ function iniciarDesafio(){
         sinPistasEntrenamiento: prom(ganadas.filter(m=>m.tipo!=="envivo").map(m=>m.sinPistas)),
         sinPistasEnVivo: prom(ganadas.filter(m=>m.tipo==="envivo").map(m=>m.sinPistas))
       },
-      partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS, corridas: CORRIDAS
+      partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS, corridas: CORRIDAS,
+      simulador: (()=>{ const S = resumenSim(); return S ? { resumen: S, hechos: SIM.hechos, total: SIM.total, prior: PRIOR } : null; })()
     };
     const txt = JSON.stringify(reporte), ta = $("repTxt");
     ta.style.display = "block"; ta.value = txt; ta.focus(); ta.select(); ta.setSelectionRange(0, txt.length);
