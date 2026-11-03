@@ -1705,14 +1705,37 @@ function leccionCorrida(C){
   for(let x=MIN;x<=MAX;x++){ if(mult[x]>=1.1) sube.push(x); else if(mult[x]<=0.92) baja.push(x); }
   return { mult, sube, baja };
 }
+/* EL MÉTODO: lo que aprende para TODOS los sorteos (no se borra al olvidar uno).
+   Después de cada sorteo nuevo mira qué métodos tenían arriba los números
+   donde tuvo razón, y les sube o baja el peso. Cada sorteo cuenta una sola vez. */
+const CLAVE_METODO = "loto_metodo_v1";
+let METODO = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_METODO)) || null; } catch(e){ return null; } })() || { m:{ calientes:1, recientes:1, atrasados:1, arrastre:1 }, vistos:{}, n:0, historia:[] };
+function guardarMetodo(){ try { localStorage.setItem(CLAVE_METODO, JSON.stringify(METODO)); } catch(e){} }
+function aprenderMetodo(C){
+  if(!C.f || !C.R || METODO.vistos[C.f]) return null;
+  const cob = {}, antes = { ...METODO.m };
+  MET.forEach(k=>{ cob[k] = C.real.filter(n=>C.R[k][n]<=10).length;
+    METODO.m[k] = Math.min(5, Math.max(0.2, METODO.m[k]*Math.exp(0.15*(cob[k]-1.5)))); });
+  METODO.vistos[C.f] = true; METODO.n++;
+  METODO.historia.push({ f: C.f, cob, primeraAciertos: C.mejorJugada.filter(n=>C.real.includes(n)).length, intentos: C.intentos, encontrada: !!C.encontrada });
+  if(METODO.historia.length>300) METODO.historia.splice(0, METODO.historia.length-300);
+  guardarMetodo();
+  return { cob, antes };
+}
+function textoMetodo(){
+  const h = METODO.historia, prom = h.length ? h.reduce((a,x)=>a+x.primeraAciertos,0)/h.length : null;
+  return `${MET.map(k=>`${nombreCorto[k]} ×${METODO.m[k].toFixed(2)}`).join(" · ")}<br>Aprendido de ${METODO.n} sorteo(s) distintos.${prom!=null?` Su primera jugada (sin saber nada del sorteo) ha acertado ${prom.toFixed(2)} de 6 en promedio; al azar sería 0.90.`:""}`;
+}
 function iniciarCorrida(){
   const f = $("fechaDes").value || null, real = realComp();
   if(!real){ $("corridaBox").innerHTML = '<span class="bad">Escribe arriba el sorteo real con sus 6 números: la app lo usa solo para anotar los aciertos y saber cuándo parar.</span>'; return; }
   const H = f ? historial().filter(h=>h.fecha<f) : historial();
-  const pts = H.length>=3 ? construirDiario(H).puntos : new Float32Array(MAX+1);
+  const D = H.length>=3 ? construirDiario(H) : null;
+  const pts = D ? D.puntos : new Float32Array(MAX+1);
   let mn = Infinity, mx = -Infinity; for(let x=MIN;x<=MAX;x++){ mn = Math.min(mn, pts[x]); mx = Math.max(mx, pts[x]); }
   let w = new Float64Array(MAX+1); for(let x=MIN;x<=MAX;x++) w[x] = 1 + 2*((pts[x]-mn)/((mx-mn)||1));   // todos posibles; los de mejor puntaje, más seguido
-  if(AFIN && AFIN.aplicado && H.length>=3) w = pesosCorrida(construirDiario(H).S, AFIN.conf);
+  if(D && METODO.n>0) w = pesosCorrida(D.S, { a:2, m: MET.map(k=>METODO.m[k]) });   // usa el método aprendido
+  else if(AFIN && AFIN.aplicado && D) w = pesosCorrida(D.S, AFIN.conf);
   const A = f && APRC[f] ? APRC[f] : null;
   if(A) for(let x=MIN;x<=MAX;x++) w[x] *= A.w[x];
   const mejorJugada = [...Array(MAX).keys()].map(i=>i+1).sort((a,b)=>w[b]-w[a]).slice(0,K).sort((a,b)=>a-b);
@@ -1776,6 +1799,10 @@ function textoVueltas(C){
     <div class="note">Primera jugada de esta vuelta: <b>${C.mejorJugada.join(", ")}</b> → acertó ${ult.aciertosPrimera} de 6.</div>
     ${L ? `<div class="note">Lo que se le dijo para la próxima vuelta (dónde tuvo razón en sus intentos de 3, 4 y 5):<br>✅ Tuvo razón con: <b>${L.sube.join(", ")||"—"}</b> → los va a tirar más.<br>❌ Se equivocó con ${L.baja.length} números → los va a tirar menos.</div>` : ""}
     <div class="note">${ult.intentos===1 && ult.encontrada ? "🎯 Ya lo pega a la primera con este sorteo." : "👉 Dale otra vez a 🎲 con este mismo sorteo: arranca con lo aprendido."}</div>
+    <div class="sub" style="margin-top:8px">🧩 <b>El método</b> (sirve para todos los sorteos y no se borra)</div>
+    ${C.metodoAprendido ? `<div class="note">De este sorteo aprendió: ${MET.map(k=>`${nombreCorto[k]} tenía ${C.metodoAprendido.cob[k]} de los 6 arriba ${C.metodoAprendido.cob[k]>=2?"✅":C.metodoAprendido.cob[k]===0?"❌":"➖"}`).join(" · ")}</div>`
+      : `<div class="note">Este sorteo ya le enseñó al método antes: repetirlo no le enseña nada nuevo al método. Para mejorar el método, pásale el siguiente sorteo.</div>`}
+    <div class="note">${textoMetodo()}</div>
     <div style="margin-top:6px"><button class="sec" onclick="if(confirm('¿Que olvide lo aprendido con este sorteo?')){ delete APRC['${C.f}']; guardarAprc(); this.textContent='Olvidado'; }">🔄 Que olvide este sorteo</button></div>`;
 }
 function textoAnalisisCorrida(A){
@@ -1799,6 +1826,7 @@ function terminarCorrida(){
     A.vueltas.push({ intentos: C.intentos, encontrada: !!C.encontrada, primera: C.mejorJugada, aciertosPrimera: C.mejorJugada.filter(n=>C.real.includes(n)).length });
     if(L){ for(let x=MIN;x<=MAX;x++) A.w[x] = Math.min(1e6, Math.max(1e-6, A.w[x]*L.mult[x])); }
     C.leccion = L; guardarAprc();
+    C.metodoAprendido = aprenderMetodo(C);
   }
   const seg = (Date.now()-C.inicio)/1000;
   const reg = { fecha: hoyISO(), encontrada: !!C.encontrada, intentos: C.intentos, segundos: Math.round(seg), dist: C.dist,
@@ -2302,6 +2330,7 @@ function iniciarDesafio(){
       },
       partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS, corridas: CORRIDAS,
       aprendidoPorSorteo: Object.fromEntries(Object.entries(APRC).map(([f,a])=>[f,{ vueltas:a.vueltas, arriba:[...Array(MAX).keys()].map(i=>i+1).sort((x,y)=>a.w[y]-a.w[x]).slice(0,10) }])),
+      metodo: { pesos: METODO.m, sorteos: METODO.n, historia: METODO.historia.slice(-30) },
       afinado: AFIN,
       entrenamientos: ENTRENOS.slice(-10).map(e=>({ fecha:e.fecha, sorteos:e.sorteos, segundos:e.segundos, cambio:e.cambio, formas:e.formas })),
       formaDeJugar: cfgPistas(),
