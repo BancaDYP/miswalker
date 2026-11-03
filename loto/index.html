@@ -78,8 +78,8 @@
     <label for="realComp">Sorteo real (solo para que tú compares; el sistema no lo ve ni se guarda)</label>
     <input id="realComp" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej: 11,15,16,20,29,31">
     <div id="realAviso" class="note" style="margin-top:4px"></div>
-    <div style="margin-top:12px"><button id="btnCorrida" style="background:#0ea5e9">🎲 Buscar solo sin pistas</button></div>
-    <div id="corridaBox" style="margin-top:8px"></div>
+    <div style="margin-top:12px"><button id="btnInsp" style="background:#0ea5e9">🎲 Buscar solo sin pistas</button></div>
+    <div id="inspBox" style="margin-top:8px"></div>
     <div style="margin-top:8px"><button id="btnAuto" style="background:#8b5cf6">🤖 Buscar solo con pistas</button></div>
     <div id="autoMsg" class="note" style="margin-top:6px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
@@ -114,6 +114,8 @@
     <textarea id="repTxt" readonly style="display:none;width:100%;height:120px;margin-top:6px;background:#11141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px"></textarea>
   </div>
 
+    <div style="margin-top:6px"><button id="btnCorrida" style="background:#0e7490">🎲 Corrida (busca hasta pegar los 6)</button></div>
+    <div id="corridaBox" style="margin-top:8px"></div>
     <div class="flex" style="margin-top:6px">
       <button id="btnNueva">🎯 Con pistas (tú le das las pistas)</button>
       <button id="btnSinPistas" style="background:var(--acc);color:#04210f">🔮 Sin pistas</button>
@@ -2112,6 +2114,159 @@ function terminarEntreno(vars, res, idxs, seg){
     <div class="note">Cada vez que lo entrenas prueba variantes distintas. Llevas ${ENTRENOS.length} entrenamiento(s); su forma actual promedia ${(AJUSTE_PISTAS ? AJUSTE_PISTAS.prom : act.r.prom).toFixed(2)} intentos.</div>`;
 }
 
+/* =========================================================
+   INSPECCIÓN (botón azul): el robot repasa TODO lo guardado,
+   sorteo por sorteo y sin mirar el siguiente: qué habría sugerido,
+   dónde acertó 3, 4 o 5, qué números fallaron y por qué, qué
+   números salen juntos. Con lo aprendido tira 4 combinaciones para
+   el próximo sorteo. Cuando le das el sorteo real, revisa qué pasó
+   y busca cómo lo habría podido acertar.
+   ========================================================= */
+const SENALES = ["calientes","recientes","atrasados","arrastre"];
+const NOMBRE_SEN = { calientes:"los que más salen", recientes:"salieron hace poco", atrasados:"atrasados", arrastre:"arrastre (siguen al sorteo anterior)", juntos:"salen juntos" };
+const CLAVE_P4 = "loto_pred4_v1";
+let PRED4 = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_P4)) || {}; } catch(e){ return {}; } })();
+function guardarP4(){ try { localStorage.setItem(CLAVE_P4, JSON.stringify(PRED4)); } catch(e){} }
+function proximoSorteo(f){ const d = new Date(f+"T12:00:00"); do { d.setDate(d.getDate()+1); } while(d.getDay()!==3 && d.getDay()!==6); return d.toISOString().slice(0,10); }
+const AZAR4 = { t3: 1-Math.pow(1-0.03336,4), t4: 1-Math.pow(1-0.002245,4) };
+
+function estadoNuevo(){ return { H:[], freq:new Float32Array(MAX+1), ultimo:new Int32Array(MAX+1).fill(-1),
+  T:Array.from({length:MAX+1},()=>new Float32Array(MAX+1)), salidas:new Float32Array(MAX+1), J:Array.from({length:MAX+1},()=>new Float32Array(MAX+1)) }; }
+function estadoAgregar(E, h){
+  const i = E.H.length;
+  if(i>0) E.H[i-1].nums.forEach(a=>{ E.salidas[a]++; h.nums.forEach(b=>E.T[a][b]++); });
+  h.nums.forEach(x=>{ E.freq[x]++; E.ultimo[x] = i; h.nums.forEach(y=>{ if(y!==x) E.J[x][y]++; }); });
+  E.H.push(h);
+}
+function senales(E){
+  const i = E.H.length, S = {};
+  S.calientes = normaliza(E.freq);
+  const r = new Float32Array(MAX+1); E.H.slice(Math.max(0,i-10), i).forEach((h,k,arr)=>h.nums.forEach(x=>r[x] += (k+1)/arr.length)); S.recientes = normaliza(r);
+  const at = new Float32Array(MAX+1); for(let x=MIN;x<=MAX;x++) at[x] = E.ultimo[x]<0 ? 3 : Math.min((i-1-E.ultimo[x])/(MAX/K), 3); S.atrasados = normaliza(at);
+  const mk = new Float32Array(MAX+1); if(i>0) E.H[i-1].nums.forEach(a=>{ if(E.salidas[a]) for(let x=MIN;x<=MAX;x++) mk[x] += E.T[a][x]/E.salidas[a]; }); S.arrastre = normaliza(mk);
+  return S;
+}
+function liftDe(E){   // cuántas veces más de lo normal salen juntos dos números
+  const n = E.H.length, esp = n*30/1560, L = Array.from({length:MAX+1},()=>new Float32Array(MAX+1));
+  for(let a=MIN;a<=MAX;a++) for(let b=MIN;b<=MAX;b++) L[a][b] = esp>0 ? E.J[a][b]/esp : 1;
+  return L;
+}
+function puntajeSen(S, w){ const sc = new Float64Array(MAX+1); let t = 0; SENALES.forEach(k=>t += w[k]); for(let x=MIN;x<=MAX;x++){ let v = 0; SENALES.forEach(k=>v += w[k]*S[k][x]); sc[x] = t ? v/t : 0; } return sc; }
+function cuatroCombos(sc, L, Jw){
+  const usado = new Array(MAX+1).fill(0), combos = [];
+  for(let c=0;c<4;c++){
+    const combo = [];
+    while(combo.length<K){
+      let best = -1e9, bx = MIN;
+      for(let x=MIN;x<=MAX;x++){ if(combo.includes(x)) continue;
+        let v = sc[x] - 0.35*usado[x];
+        if(combo.length){ let l = 0; combo.forEach(a=>l += Math.min(3, L[a][x]) - 1); v += Jw*0.5*l/combo.length; }
+        if(v>best){ best = v; bx = x; } }
+      combo.push(bx);
+    }
+    combo.forEach(x=>usado[x]++); combos.push(combo.sort((a,b)=>a-b));
+  }
+  return combos;
+}
+const rankDe = s => { const r = {}; [...Array(MAX).keys()].map(i=>i+1).sort((a,b)=>s[b]-s[a]).forEach((n,i)=>r[n] = i+1); return r; };
+function aprenderSen(w, Jw, S, L, real){
+  const cob = {}; SENALES.forEach(k=>{ const R = rankDe(S[k]); cob[k] = real.filter(n=>R[n]<=10).length; w[k] = Math.min(5, Math.max(0.2, w[k]*Math.exp(0.12*(cob[k]-1.5)))); });
+  let l = 0, np = 0; for(let i=0;i<K;i++) for(let j=i+1;j<K;j++){ l += Math.min(3, L[real[i]][real[j]]) - 1; np++; }
+  const lj = l/np; Jw = Math.min(4, Math.max(0.1, Jw*Math.exp(0.6*lj)));
+  return { Jw, cob, lj };
+}
+/* Repasa todo el historial en orden, como si viviera cada sorteo */
+function repasarTodo(){
+  const T = historial(), E = estadoNuevo(), w = { calientes:1, recientes:1, atrasados:1, arrastre:1 }; let Jw = 1;
+  const reg = []; const INI = 30;
+  T.forEach((h,i)=>{
+    if(i>=INI){
+      const S = senales(E), L = liftDe(E), sc = puntajeSen(S, w), combos = cuatroCombos(sc, L, Jw);
+      const ac = combos.map(c=>c.filter(n=>h.nums.includes(n)).length);
+      const A = aprenderSen(w, Jw, S, L, h.nums); Jw = A.Jw;
+      reg.push({ fecha:h.fecha, ac, mejor:Math.max(...ac), cob:A.cob });
+    }
+    estadoAgregar(E, h);
+  });
+  return { E, w, Jw, reg, T };
+}
+/* Lo que pasó en un sorteo y cómo lo habría acertado */
+function revisarSorteo(Eantes, real, w, Jw, combosDados){
+  const S = senales(Eantes), L = liftDe(Eantes), sc = puntajeSen(S, w), R = {}; SENALES.forEach(k=>R[k] = rankDe(S[k])); const Rsc = rankDe(sc);
+  const combos = combosDados || cuatroCombos(sc, L, Jw), ac = combos.map(c=>c.filter(n=>real.includes(n)));
+  const porNum = real.map(n=>{ const mej = SENALES.map(k=>({ k, p:R[k][n] })).sort((a,b)=>a.p-b.p)[0];
+    const comp = real.filter(m=>m!==n).map(m=>({ m, l:L[n][m] })).sort((a,b)=>b.l-a.l)[0];
+    return { n, puesto:Rsc[n], senal: mej.p<=10 ? `${NOMBRE_SEN[mej.k]} (#${mej.p})` : null, comp }; });
+  // ¿qué mezcla lo habría acertado?
+  const g = [0,0.5,1,2,4], gj = [0,1,2,4]; let tope = { k:-1 };
+  for(const a of g) for(const b of g) for(const c of g) for(const d of g){ if(a+b+c+d===0) continue;
+    const ww = { calientes:a, recientes:b, atrasados:c, arrastre:d }, s2 = puntajeSen(S, ww);
+    for(const j of gj){ const cs = cuatroCombos(s2, L, j); const k = Math.max(...cs.map(x=>x.filter(n=>real.includes(n)).length));
+      if(k>tope.k) tope = { k, ww, j, combo: cs.reduce((p,x)=>x.filter(n=>real.includes(n)).length>p.filter(n=>real.includes(n)).length?x:p) }; if(tope.k===6) break; }
+    if(tope.k===6) break; }
+  // pares del sorteo que salen juntos más de lo normal
+  const pares = []; for(let i=0;i<K;i++) for(let j=i+1;j<K;j++){ const l = L[real[i]][real[j]]; if(l>=1.5) pares.push({ a:real[i], b:real[j], l, veces:Eantes.J[real[i]][real[j]] }); }
+  pares.sort((x,y)=>y.l-x.l);
+  return { combos, ac, porNum, tope, pares };
+}
+function textoMezcla(ww, j){ const p = SENALES.filter(k=>ww[k]>0).sort((a,b)=>ww[b]-ww[a]).map(k=>`${NOMBRE_SEN[k]} ×${ww[k]}`); if(j>0) p.push(`salen juntos ×${j}`); return p.join(", ") || "nada"; }
+const bolasR = (c, real) => `<div class="balls">${c.map(n=>`<div class="ball ${real && real.includes(n)?'match':''}">${n}</div>`).join("")}</div>`;
+
+function inspeccion(){
+  const box = $("inspBox"); box.innerHTML = "🔎 Revisando todos los sorteos y partidas…";
+  setTimeout(()=>{
+    let aviso = "";
+    // 1) ¿Me diste el sorteo real de una predicción pendiente?
+    const real = realComp(), pend = Object.keys(PRED4).filter(f=>!PRED4[f].real).sort().pop();
+    const ultGuardado = historial().slice(-1)[0];
+    const yaGuardado = real && ultGuardado && [...real].sort((a,b)=>a-b).join() === [...ultGuardado.nums].sort((a,b)=>a-b).join();
+    if(pend && real && !yaGuardado){
+      PRED4[pend].real = real; guardarP4();
+      if(!historial().some(h=>h.fecha===pend)){ extra.push({ fecha: pend, nums: [...real].sort((a,b)=>a-b) }); guardarExtra(extra); }
+      aviso = pend; $("realComp").value = ""; if($("realAviso")) $("realAviso").textContent = "";
+    }
+    // 2) Repasa todo
+    const Rr = repasarTodo(), T = Rr.T, ult = T[T.length-1];
+    const n = Rr.reg.length, p3 = Rr.reg.filter(r=>r.mejor>=3).length/n, p4 = Rr.reg.filter(r=>r.mejor>=4).length/n;
+    const prom = Rr.reg.reduce((a,r)=>a+r.mejor,0)/n;
+    const mem = memoria().filter(m=>m.intentos && m.intentos.length);
+    const sp = mem.map(m=>m.intentos[0].aciertos), sp3 = mem.reduce((a,m)=>a+m.intentos.filter(t=>t.aciertos>=3 && t.aciertos<6).length,0);
+    // 3) Revisión del último sorteo (con el estado ANTES de ese sorteo)
+    const Eant = estadoNuevo(); T.slice(0,-1).forEach(h=>estadoAgregar(Eant, h));
+    const wAnt = { ...Rr.w }; // pesos casi iguales; para la revisión basta
+    const dados = PRED4[ult.fecha] && PRED4[ult.fecha].combos;
+    const Rv = revisarSorteo(Eant, ult.nums, wAnt, Rr.Jw, dados);
+    // 4) Las 4 para el próximo
+    const prox = proximoSorteo(ult.fecha);
+    const S = senales(Rr.E), L = liftDe(Rr.E), sc = puntajeSen(S, Rr.w), combos = cuatroCombos(sc, L, Rr.Jw), Rsc = rankDe(sc);
+    const Rk = {}; SENALES.forEach(k=>Rk[k] = rankDe(S[k]));
+    if(!PRED4[prox] || !PRED4[prox].real){ PRED4[prox] = { combos, generada: new Date().toISOString(), base: ult.fecha }; guardarP4(); }
+    const porque = c => c.map(x=>{ const m = SENALES.filter(k=>Rk[k][x]<=6).map(k=>NOMBRE_SEN[k].split(" (")[0]); if(m.length) return `${x}: ${m.join(" + ")}`;
+      const l = c.filter(y=>y!==x).reduce((a,y)=>a+L[x][y],0)/(K-1); return l>=1.15 ? `${x}: sale junto a estos (×${l.toFixed(1)})` : `${x}: para cubrir otros números`; }).join(" · ");
+    const pesosTxt = SENALES.map(k=>`${NOMBRE_SEN[k].split(" (")[0]} ×${Rr.w[k].toFixed(2)}`).join(" · ") + ` · salen juntos ×${Rr.Jw.toFixed(2)}`;
+    box.innerHTML = `<div class="card" style="background:#11141a">
+      ${aviso ? `<div class="ok" style="margin-bottom:6px">✅ Guardé el sorteo del ${fmtFecha(aviso)} y lo revisé.</div>` : ""}
+      <div class="sub">🔎 <b>Inspección</b></div>
+      <div class="note">Procesé <b>${T.length}</b> sorteos y <b>${mem.length}</b> partidas. Practicando con los sorteos viejos, sin ver el siguiente, sus 4 combinaciones acertaron: 3 o más en <b>${(p3*100).toFixed(1)}%</b> de los sorteos y 4 o más en <b>${(p4*100).toFixed(1)}%</b> (tirando al azar sería ${(AZAR4.t3*100).toFixed(1)}% y ${(AZAR4.t4*100).toFixed(1)}%). La mejor de las 4 acertó ${prom.toFixed(2)} en promedio.</div>
+      <div class="note">En tus partidas, la sugerencia sin pistas acertó ${(sp.reduce((a,b)=>a+b,0)/(sp.length||1)).toFixed(2)} de promedio, y hubo ${sp3} intentos con 3, 4 o 5 aciertos.</div>
+      <div class="note">Lo que le está funcionando (pesos): ${pesosTxt}</div>
+
+      <div class="sub" style="margin-top:10px">👀 <b>Último sorteo: ${fmtFecha(ult.fecha)}</b></div>
+      ${bolasR(ult.nums, ult.nums)}
+      <div class="note">${dados ? "Las 4 que te di" : "Las 4 que habría tirado"} para ese sorteo:</div>
+      ${Rv.combos.map((c,i)=>`<div class="row"><span class="date">${i+1}</span>${bolasR(c, ult.nums)}<div class="score"><b class="${Rv.ac[i].length>=3?'ok':''}">${Rv.ac[i].length}/6</b></div></div>`).join("")}
+      <div class="note">${Rv.ac.some(a=>a.length>=3) ? `✅ Donde acertó: ${Rv.ac.map((a,i)=>a.length>=3?`combinación ${i+1} con ${a.join(", ")}`:null).filter(Boolean).join("; ")}.` : "Ninguna llegó a 3."} ${Rv.ac.some(a=>a.length===0) ? `❌ Descarta lo que no dio nada: ${Rv.ac.map((a,i)=>a.length===0?`combinación ${i+1}`:null).filter(Boolean).join(", ")}.` : ""}</div>
+      <div class="note"><b>¿Por qué salió cada número?</b><br>${Rv.porNum.map(x=>`<b>${x.n}</b>: puesto ${x.puesto} de 40 · ${x.senal ? `lo tenía ${x.senal}` : "❌ ninguna señal lo tenía arriba"}${x.comp && x.comp.l>=1.3 ? ` · sale con el ${x.comp.m} ${x.comp.l.toFixed(1)} veces más de lo normal` : ""}`).join("<br>")}</div>
+      ${Rv.pares.length ? `<div class="note">🤝 Parejas de ese sorteo que salen juntas más de lo normal: ${Rv.pares.slice(0,4).map(p=>`${p.a} y ${p.b} (${p.veces} veces, ×${p.l.toFixed(1)})`).join(", ")}.</div>` : ""}
+      <div class="note">🤔 <b>Si yo hubiera hecho esto…</b> usando ${textoMezcla(Rv.tope.ww, Rv.tope.j)}, una de las 4 habría sido ${Rv.tope.combo.join(", ")} → <b>${Rv.tope.k} de 6</b>. ${Rv.tope.k<6 ? `Es lo máximo que podía con lo que sabe mirar; para los que faltaron necesitaría otra pista.` : "¡Con eso lo habría acertado completo!"}</div>
+
+      <div class="sub" style="margin-top:10px">🎯 <b>Las 4 para el sorteo del ${fmtFecha(prox)}</b></div>
+      ${combos.map((c,i)=>`<div class="row"><span class="date">${i+1}</span>${bolasR(c)}</div><div class="note" style="margin:-2px 0 6px">${porque(c)}</div>`).join("")}
+      <div class="note">👉 Cuando salga ese sorteo, escribe arriba los 6 números y toca otra vez el botón azul: los guarda, revisa qué pasó y tira las 4 del siguiente.</div>
+    </div>`;
+  }, 30);
+}
+
 /* ---------- Búsqueda automática ----------
    La app hace de "tú": compara cada propuesta con el sorteo real y le pasa al
    buscador SOLO cuántos números coincidieron. El buscador nunca ve cuáles. */
@@ -2275,6 +2430,7 @@ function iniciarDesafio(){
   $("btnAfinar").onclick = ()=>afinarCorrida();
   if(AFIN) $("afinMsg").innerHTML = textoAfinado();
   $("btnEntrenar").onclick = iniciarEntreno;
+  $("btnInsp").onclick = inspeccion;
   if(ENTRENOS.length){ const u = ENTRENOS[ENTRENOS.length-1]; $("entBox").innerHTML = `Último entrenamiento: su forma actual promedió ${u.formas[0].prom.toFixed(2)} intentos en ${u.sorteos} sorteos${u.cambio?` y aprendió con la ${u.cambio}`:""}.`; }
   $("btnSim").onclick = ()=>{ if($("simBox").innerHTML) { $("simBox").innerHTML = ""; return; } pintarSimulador(); };
   $("btnCorrida").onclick = ()=>{ if(CORRIDA && CORRIDA.corriendo) return; iniciarCorrida(); };
@@ -2344,6 +2500,7 @@ function iniciarDesafio(){
       partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS, corridas: CORRIDAS,
       aprendidoPorSorteo: Object.fromEntries(Object.entries(APRC).map(([f,a])=>[f,{ vueltas:a.vueltas, arriba:[...Array(MAX).keys()].map(i=>i+1).sort((x,y)=>a.w[y]-a.w[x]).slice(0,10) }])),
       metodo: { pesos: METODO.m, sorteos: METODO.n, historia: METODO.historia.slice(-30) },
+      predicciones4: PRED4,
       afinado: AFIN,
       entrenamientos: ENTRENOS.slice(-10).map(e=>({ fecha:e.fecha, sorteos:e.sorteos, segundos:e.segundos, cambio:e.cambio, formas:e.formas })),
       formaDeJugar: cfgPistas(),
