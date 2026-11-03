@@ -86,6 +86,8 @@
     <div id="autoMsg" class="note" style="margin-top:6px"></div>
     <div style="margin-top:8px"><button id="btnCorrida" style="background:#0ea5e9">🎲 Corrida sin pistas (no le dice nada, para solo con los 6)</button></div>
     <div id="corridaBox" style="margin-top:8px"></div>
+    <div style="margin-top:6px"><button id="btnAfinar" class="sec">🧠 Afinar con lo que hizo</button></div>
+    <div id="afinMsg" class="note" style="margin-top:6px"></div>
     <div style="margin-top:8px"><button id="btnSim" style="background:#334155">🌙 Simulador: el robot juega solo todos los sorteos guardados</button></div>
     <div id="simBox" style="margin-top:8px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
@@ -1673,7 +1675,8 @@ function iniciarCorrida(){
   const H = f ? historial().filter(h=>h.fecha<f) : historial();
   const pts = H.length>=3 ? construirDiario(H).puntos : new Float32Array(MAX+1);
   let mn = Infinity, mx = -Infinity; for(let x=MIN;x<=MAX;x++){ mn = Math.min(mn, pts[x]); mx = Math.max(mx, pts[x]); }
-  const w = new Float64Array(MAX+1); for(let x=MIN;x<=MAX;x++) w[x] = 1 + 2*((pts[x]-mn)/((mx-mn)||1));   // todos posibles; los de mejor puntaje, más seguido
+  let w = new Float64Array(MAX+1); for(let x=MIN;x<=MAX;x++) w[x] = 1 + 2*((pts[x]-mn)/((mx-mn)||1));   // todos posibles; los de mejor puntaje, más seguido
+  if(AFIN && AFIN.aplicado && H.length>=3) w = pesosCorrida(construirDiario(H).S, AFIN.conf);
   const { R } = H.length>=3 ? rangos(f) : { R:null };
   CORRIDA = { f, real, w, R, visto: new Uint8Array(Math.ceil(combinaciones(MAX,K)/8)+1), intentos: 0, dist: [0,0,0,0,0,0,0],
               mejores: [], porNumero: new Array(MAX+1).fill(0), metodos: { calientes:0, recientes:0, atrasados:0, arrastre:0, forma:0 },
@@ -1731,7 +1734,8 @@ function textoAnalisisCorrida(A){
     <div class="note">Primera vez que pegó 2: ${hit(2)} · 3: ${hit(3)} · 4: ${hit(4)} · 5: ${hit(5)} · 6: ${hit(6)}</div>
     <div class="note">Cada número del sorteo, según qué tan arriba lo tenía el robot (de 40):<br>${A.porNum.map(x=>`<b>${x.n}</b> → puesto ${x.puesto}, ${x.metodo}, salió en ${x.veces3.toLocaleString("es-DO")} intentos de 3+`).join("<br>")}</div>
     <div class="note">${fuertes.length ? `Los tenía arriba: ${fuertes.join(", ")}. ` : ""}${debiles.length ? `Los tenía abajo: ${debiles.join(", ")} → esos lo hicieron tardar.` : "Ninguno estaba muy abajo."}</div>
-    <div class="note">Los "números fuertes" de los intentos de 3+ siempre son los del sorteo real: el robot los tira más o menos seguido según el puesto que les daba.</div>`;
+    <div class="note">Los "números fuertes" de los intentos de 3+ siempre son los del sorteo real: el robot los tira más o menos seguido según el puesto que les daba.</div>
+    <div class="note">👉 Toca "🧠 Afinar con lo que hizo" para que ajuste su mezcla de métodos con esto y con todos los sorteos guardados.</div>`;
 }
 
 function terminarCorrida(){
@@ -1871,6 +1875,64 @@ function pintarSimulador(){
   if($("btnSimPausa")) $("btnSimPausa").onclick = ()=>{ SIM_CORRIENDO = false; };
   if($("btnSimSeguir")) $("btnSimSeguir").onclick = ()=>iniciarSimulador(false);
   if($("btnSimOtra")) $("btnSimOtra").onclick = ()=>iniciarSimulador(true);
+}
+
+/* =========================================================
+   AFINAR LA CORRIDA CON LO QUE HIZO
+   Para cada sorteo guardado mira en qué puesto tenía el robot los
+   6 números reales (usando solo los sorteos anteriores). Prueba
+   muchas mezclas de métodos y se queda con la que pone los números
+   reales más arriba. Lo comprueba con sorteos que no usó para aprender.
+   ========================================================= */
+const CLAVE_AFIN = "loto_afinado_v1";
+let AFIN = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_AFIN)) || null; } catch(e){ return null; } })();
+const MET = ["calientes","recientes","atrasados","arrastre"];
+function pesosCorrida(S, conf){
+  const comb = new Float64Array(MAX+1); let mx = 0;
+  for(let x=MIN;x<=MAX;x++){ let t = 0; MET.forEach((k,i)=>t += conf.m[i]*S[k][x]); comb[x] = t; mx = Math.max(mx, t); }
+  const w = new Float64Array(MAX+1); for(let x=MIN;x<=MAX;x++) w[x] = 1 + conf.a*(mx ? comb[x]/mx : 0);
+  return w;
+}
+function puntajeConf(casos, conf){
+  // promedio de log(probabilidad de tirar los 6 números reales); más alto = los tenía más arriba
+  let s = 0;
+  for(const c of casos){ const w = pesosCorrida(c.S, conf); let W = 0; for(let x=MIN;x<=MAX;x++) W += w[x]; c.real.forEach(n=>s += Math.log(w[n]/W)); }
+  return s/casos.length;
+}
+function afinarCorrida(alTerminar){
+  const TODO = historial(), casos = [], box = $("afinMsg");
+  let i = 30;
+  const preparar = ()=>{
+    const t0 = performance.now();
+    while(i<TODO.length && performance.now()-t0<150){ const D = construirDiario(TODO.slice(0,i)); casos.push({ S: D.S, real: TODO[i].nums }); i++; }
+    box.innerHTML = `🧠 Revisando lo que hizo en cada sorteo… ${casos.length} de ${TODO.length-30}`;
+    if(i<TODO.length){ setTimeout(preparar, 0); return; }
+    const corte = Math.floor(casos.length*0.7), ent = casos.slice(0,corte), pru = casos.slice(corte);
+    const base = 6*Math.log(1/40);
+    const grid = [0, 0.5, 1, 2], fuerzas = [0, 1, 2, 4];
+    let mejor = null;
+    for(const a of fuerzas) for(const m0 of grid) for(const m1 of grid) for(const m2 of grid) for(const m3 of grid){
+      if(a>0 && m0+m1+m2+m3===0) continue;
+      const conf = { a, m:[m0,m1,m2,m3] }, p = puntajeConf(ent, conf);
+      if(!mejor || p>mejor.p) mejor = { conf, p };
+    }
+    const enPrueba = puntajeConf(pru, mejor.conf);
+    const factor = v => Math.exp(-(v-base));   // cuántas veces lo del azar tardaría (1.00 = igual que el azar)
+    AFIN = { conf: mejor.conf, entreno: factor(mejor.p), prueba: factor(enPrueba), sorteos: casos.length, nPrueba: pru.length, fecha: new Date().toISOString(),
+             aplicado: factor(enPrueba) < 0.95 };
+    try { localStorage.setItem(CLAVE_AFIN, JSON.stringify(AFIN)); } catch(e){}
+    box.innerHTML = textoAfinado();
+    if(alTerminar) alTerminar();
+  };
+  preparar();
+}
+function textoAfinado(){
+  if(!AFIN) return "";
+  const c = AFIN.conf, mezcla = c.a===0 ? "tirar parejo (sin preferir números)" : MET.map((k,i)=>c.m[i] ? `${nombreCorto[k]} ×${c.m[i]}` : null).filter(Boolean).join(", ") + ` (fuerza ${c.a})`;
+  const pct = v => v<1 ? `${Math.round((1-v)*100)}% más rápido que el azar` : v>1 ? `${Math.round((v-1)*100)}% más lento que el azar` : "igual que el azar";
+  return `🧠 <b>Afinado con ${AFIN.sorteos} sorteos.</b> Mejor mezcla: ${mezcla}.<br>
+    En los sorteos que usó para aprender llegaría ${pct(AFIN.entreno)}. En los ${AFIN.nPrueba} más nuevos, que no vio: <b>${pct(AFIN.prueba)}</b>.<br>
+    ${AFIN.aplicado ? "✅ La corrida ya usa esta mezcla." : "La diferencia es muy pequeña para fiarse: la corrida sigue con su mezcla normal."}`;
 }
 
 /* ---------- Búsqueda automática ----------
@@ -2033,6 +2095,8 @@ function iniciarDesafio(){
   });
 
   $("btnAuto").onclick = iniciarAuto;
+  $("btnAfinar").onclick = ()=>afinarCorrida();
+  if(AFIN) $("afinMsg").innerHTML = textoAfinado();
   $("btnSim").onclick = ()=>{ if($("simBox").innerHTML) { $("simBox").innerHTML = ""; return; } pintarSimulador(); };
   $("btnCorrida").onclick = ()=>{ if(CORRIDA && CORRIDA.corriendo) return; iniciarCorrida(); };
 
@@ -2099,6 +2163,7 @@ function iniciarDesafio(){
         sinPistasEnVivo: prom(ganadas.filter(m=>m.tipo==="envivo").map(m=>m.sinPistas))
       },
       partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS, corridas: CORRIDAS,
+      afinado: AFIN,
       simulador: (()=>{ const S = resumenSim(); return S ? { resumen: S, hechos: SIM.hechos, total: SIM.total, prior: PRIOR } : null; })()
     };
     const txt = JSON.stringify(reporte), ta = $("repTxt");
