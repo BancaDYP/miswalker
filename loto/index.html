@@ -86,10 +86,6 @@
     <div id="autoMsg" class="note" style="margin-top:6px"></div>
     <div style="margin-top:8px"><button id="btnCorrida" style="background:#0ea5e9">🎲 Corrida sin pistas (no le dice nada, para solo con los 6)</button></div>
     <div id="corridaBox" style="margin-top:8px"></div>
-    <div style="margin-top:6px"><button id="btnAfinar" class="sec">🧠 Afinar con lo que hizo</button></div>
-    <div id="afinMsg" class="note" style="margin-top:6px"></div>
-    <div style="margin-top:8px"><button id="btnEntrenar" style="background:#7c3aed">🎓 Entrenar jugando solo</button></div>
-    <div id="entBox" class="note" style="margin-top:6px"></div>
     <div style="margin-top:8px"><button id="btnSim" style="background:#334155">🌙 Simulador: el robot juega solo todos los sorteos guardados</button></div>
     <div id="simBox" style="margin-top:8px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
@@ -124,6 +120,11 @@
   <!-- TODO LO DEMÁS, ESCONDIDO -->
   <details id="avanzado">
     <summary class="sub" style="padding:10px 4px">⚙️ Ver más opciones</summary>
+    <div style="margin-top:6px"><button id="btnAfinar" class="sec">🧠 Afinar con lo que hizo</button></div>
+    <div id="afinMsg" class="note" style="margin-top:6px"></div>
+    <div style="margin-top:8px"><button id="btnEntrenar" style="background:#7c3aed">🎓 Entrenar jugando solo</button></div>
+    <div id="entBox" class="note" style="margin-top:6px"></div>
+
 
   <section class="card">
     <h2>Opciones de la partida</h2>
@@ -1687,6 +1688,23 @@ const CLAVE_CORRIDAS = "loto_corridas_v1";
 let CORRIDAS = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_CORRIDAS)) || {}; } catch(e){ return {}; } })();
 function guardarCorridas(){ try { localStorage.setItem(CLAVE_CORRIDAS, JSON.stringify(CORRIDAS)); } catch(e){} }
 
+/* Lo que el robot aprendió de sus vueltas anteriores con CADA sorteo.
+   Después de cada corrida se le dice dónde tuvo razón (qué números
+   estaban en sus intentos de 3, 4 y 5 aciertos) y la próxima vuelta con
+   ese mismo sorteo arranca con eso, hasta pegarlo a la primera. */
+const CLAVE_APRC = "loto_aprendido_corrida_v1";
+let APRC = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_APRC)) || {}; } catch(e){ return {}; } })();
+function guardarAprc(){ try { localStorage.setItem(CLAVE_APRC, JSON.stringify(APRC)); } catch(e){} }
+function leccionCorrida(C){
+  const cnt = C.porNumero.slice(); let tot = 0; for(let x=MIN;x<=MAX;x++) tot += cnt[x];
+  if(tot===0 && C.registro.length){ C.registro.forEach(r=>r.cuales.forEach(n=>cnt[n]++)); tot = C.registro.reduce((a,r)=>a+r.cuales.length,0); }
+  if(tot===0) return null;
+  const media = tot/(MAX-MIN+1), mult = new Array(MAX+1).fill(1);
+  for(let x=MIN;x<=MAX;x++) mult[x] = Math.min(1.35, Math.max(0.75, Math.pow((cnt[x]+0.05*media)/media, 0.25)));
+  const sube = [], baja = [];
+  for(let x=MIN;x<=MAX;x++){ if(mult[x]>=1.1) sube.push(x); else if(mult[x]<=0.92) baja.push(x); }
+  return { mult, sube, baja };
+}
 function iniciarCorrida(){
   const f = $("fechaDes").value || null, real = realComp();
   if(!real){ $("corridaBox").innerHTML = '<span class="bad">Escribe arriba el sorteo real con sus 6 números: la app lo usa solo para anotar los aciertos y saber cuándo parar.</span>'; return; }
@@ -1695,8 +1713,11 @@ function iniciarCorrida(){
   let mn = Infinity, mx = -Infinity; for(let x=MIN;x<=MAX;x++){ mn = Math.min(mn, pts[x]); mx = Math.max(mx, pts[x]); }
   let w = new Float64Array(MAX+1); for(let x=MIN;x<=MAX;x++) w[x] = 1 + 2*((pts[x]-mn)/((mx-mn)||1));   // todos posibles; los de mejor puntaje, más seguido
   if(AFIN && AFIN.aplicado && H.length>=3) w = pesosCorrida(construirDiario(H).S, AFIN.conf);
+  const A = f && APRC[f] ? APRC[f] : null;
+  if(A) for(let x=MIN;x<=MAX;x++) w[x] *= A.w[x];
+  const mejorJugada = [...Array(MAX).keys()].map(i=>i+1).sort((a,b)=>w[b]-w[a]).slice(0,K).sort((a,b)=>a-b);
   const { R } = H.length>=3 ? rangos(f) : { R:null };
-  CORRIDA = { f, real, w, R, visto: new Uint8Array(Math.ceil(combinaciones(MAX,K)/8)+1), intentos: 0, dist: [0,0,0,0,0,0,0],
+  CORRIDA = { f, real, w, R, mejorJugada, vuelta: A ? A.vueltas.length+1 : 1, visto: new Uint8Array(Math.ceil(combinaciones(MAX,K)/8)+1), intentos: 0, dist: [0,0,0,0,0,0,0],
               mejores: [], porNumero: new Array(MAX+1).fill(0), metodos: { calientes:0, recientes:0, atrasados:0, arrastre:0, forma:0 },
               inicio: Date.now(), corriendo: true, encontrada: null, ultimoPintado: 0,
               lenta: true, registro: [], ultimo: null, primeros: {} };
@@ -1718,7 +1739,7 @@ function pasoCorrida(){
   const t0 = performance.now();
   const limite = C.lenta ? 1 : Infinity; let hechos = 0;
   while(performance.now()-t0 < 120 && hechos < limite){
-    const c = tirarCombo(C.w), r = rangoCombo(c), byte = r>>3, bit = 1<<(r&7);
+    const c = C.intentos===0 ? C.mejorJugada : tirarCombo(C.w), r = rangoCombo(c), byte = r>>3, bit = 1<<(r&7);
     if(C.visto[byte] & bit) continue;            // ya la probó: no la repite
     C.visto[byte] |= bit; C.intentos++; hechos++;
     const ac = c.filter(n=>C.real.includes(n)); C.dist[ac.length]++;
@@ -1746,6 +1767,17 @@ function analisisCorrida(C){
   const n = C.intentos||1, t3 = (C.dist[3]+C.dist[4]+C.dist[5]+C.dist[6])/n, AZ3 = 0.03336;
   return { primeros: { ...C.primeros, 6: C.encontrada ? C.intentos : null }, porNum, tasa3: t3, nota: t3/AZ3 };
 }
+function textoVueltas(C){
+  const A = C.f && APRC[C.f]; if(!A) return "";
+  const v = A.vueltas, ult = v[v.length-1], L = C.leccion;
+  const lista = v.map((x,i)=>`Vuelta ${i+1}: ${x.encontrada ? (x.intentos===1 ? "<b class='ok'>¡a la primera!</b>" : `pegó en el intento ${x.intentos.toLocaleString("es-DO")}`) : `se detuvo en ${x.intentos.toLocaleString("es-DO")}`} · su primera jugada acertó ${x.aciertosPrimera}`).join("<br>");
+  return `<div class="sub" style="margin-top:8px">📚 <b>Aprendiendo este sorteo</b></div>
+    <div class="note">${lista}</div>
+    <div class="note">Primera jugada de esta vuelta: <b>${C.mejorJugada.join(", ")}</b> → acertó ${ult.aciertosPrimera} de 6.</div>
+    ${L ? `<div class="note">Lo que se le dijo para la próxima vuelta (dónde tuvo razón en sus intentos de 3, 4 y 5):<br>✅ Tuvo razón con: <b>${L.sube.join(", ")||"—"}</b> → los va a tirar más.<br>❌ Se equivocó con ${L.baja.length} números → los va a tirar menos.</div>` : ""}
+    <div class="note">${ult.intentos===1 && ult.encontrada ? "🎯 Ya lo pega a la primera con este sorteo." : "👉 Dale otra vez a 🎲 con este mismo sorteo: arranca con lo aprendido."}</div>
+    <div style="margin-top:6px"><button class="sec" onclick="if(confirm('¿Que olvide lo aprendido con este sorteo?')){ delete APRC['${C.f}']; guardarAprc(); this.textContent='Olvidado'; }">🔄 Que olvide este sorteo</button></div>`;
+}
 function textoAnalisisCorrida(A){
   const hit = k => A.primeros[k] ? `#${A.primeros[k].toLocaleString("es-DO")}` : "—";
   const fuertes = A.porNum.filter(x=>x.puesto<=10).map(x=>x.n), debiles = A.porNum.filter(x=>x.puesto>25).map(x=>x.n);
@@ -1755,12 +1787,19 @@ function textoAnalisisCorrida(A){
     <div class="note">Cada número del sorteo, según qué tan arriba lo tenía el robot (de 40):<br>${A.porNum.map(x=>`<b>${x.n}</b> → puesto ${x.puesto}, ${x.metodo}, salió en ${x.veces3.toLocaleString("es-DO")} intentos de 3+`).join("<br>")}</div>
     <div class="note">${fuertes.length ? `Los tenía arriba: ${fuertes.join(", ")}. ` : ""}${debiles.length ? `Los tenía abajo: ${debiles.join(", ")} → esos lo hicieron tardar.` : "Ninguno estaba muy abajo."}</div>
     <div class="note">Los "números fuertes" de los intentos de 3+ siempre son los del sorteo real: el robot los tira más o menos seguido según el puesto que les daba.</div>
-    <div class="note">👉 Toca "🧠 Afinar con lo que hizo" para que ajuste su mezcla de métodos con esto y con todos los sorteos guardados.</div>`;
+`;
 }
 
 function terminarCorrida(){
   const C = CORRIDA; if(!C) return;
   C.analisis = analisisCorrida(C);
+  if(C.f){
+    const L = leccionCorrida(C);
+    const A = APRC[C.f] || (APRC[C.f] = { w: new Array(MAX+1).fill(1), vueltas: [] });
+    A.vueltas.push({ intentos: C.intentos, encontrada: !!C.encontrada, primera: C.mejorJugada, aciertosPrimera: C.mejorJugada.filter(n=>C.real.includes(n)).length });
+    if(L){ for(let x=MIN;x<=MAX;x++) A.w[x] = Math.min(1e6, Math.max(1e-6, A.w[x]*L.mult[x])); }
+    C.leccion = L; guardarAprc();
+  }
   const seg = (Date.now()-C.inicio)/1000;
   const reg = { fecha: hoyISO(), encontrada: !!C.encontrada, intentos: C.intentos, segundos: Math.round(seg), dist: C.dist,
     mejores: [...C.mejores].sort((a,b)=>b.aciertos-a.aciertos).slice(0,30),
@@ -1778,7 +1817,7 @@ function pintarCorrida(final){
   const numTop = C.porNumero.map((v,n)=>({n,v})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,6);
   const totM = Object.values(C.metodos).reduce((a,b)=>a+b,0) || 1;
   box.innerHTML = `<div class="card" style="background:#11141a">
-    <div class="sub">🎲 <b>Corrida sin pistas</b> ${C.f?`· ${fmtFecha(C.f)}`:""} ${C.corriendo?`<span class="note">(corriendo… ${vel.toLocaleString("es-DO")} por segundo)</span>`:""}</div>
+    <div class="sub">🎲 <b>Corrida sin pistas</b> ${C.f?`· ${fmtFecha(C.f)} · vuelta ${C.vuelta}`:""} ${C.corriendo?`<span class="note">(corriendo… ${vel.toLocaleString("es-DO")} por segundo)</span>`:""}</div>
     ${C.encontrada ? `<div class="ok" style="margin:6px 0"><b>🎯 ¡Coincidieron los 6 en el intento ${C.intentos.toLocaleString("es-DO")}!</b></div><div class="balls">${C.encontrada.map(n=>`<div class="ball match">${n}</div>`).join("")}</div>` : (final ? `<div class="note" style="margin:6px 0">⏹️ Detenida sin llegar a los 6.</div>` : "")}
     <div class="grid" style="margin-top:8px">
       <div class="stat"><b>${C.intentos.toLocaleString("es-DO")}</b><span>Combinaciones probadas (sin repetir)</span></div>
@@ -1790,6 +1829,7 @@ function pintarCorrida(final){
       ${[...C.registro].reverse().slice(0,25).map(x=>`<div class="note">#${x.i.toLocaleString("es-DO")}: <b>${x.aciertos}</b> aciertos → ${x.cuales.join(", ")}</div>`).join("")}</details>` : ""}
     ${numTop.length ? `<div class="note">Números que más aparecieron en los intentos de 3 o más: ${numTop.map(x=>`${x.n} (${x.v})`).join(", ")}</div>` : ""}
     ${C.R && totM>1 ? `<div class="note">En esos aciertos, el número venía de: ${Object.keys(C.metodos).map(k=>`${k==="forma"?"la forma / azar":nombreCorto[k]} ${Math.round(C.metodos[k]/totM*100)}%`).join(" · ")}</div>` : ""}
+    ${final ? textoVueltas(C) : ""}
     ${final && C.analisis ? textoAnalisisCorrida(C.analisis) : ""}
     ${top.length ? `<div class="sub" style="margin-top:6px">Mejores intentos:</div>${top.map(x=>`<div class="row"><span class="date">#${x.intento.toLocaleString("es-DO")}</span><div class="balls">${x.combo.map(n=>`<div class="ball ${C.real.includes(n)?'match':''}">${n}</div>`).join("")}</div><div class="score"><b class="ok">${x.aciertos}/6</b></div></div>`).join("")}` : ""}
   </div>`;
@@ -2261,6 +2301,7 @@ function iniciarDesafio(){
         sinPistasEnVivo: prom(ganadas.filter(m=>m.tipo==="envivo").map(m=>m.sinPistas))
       },
       partidas: MEM_LOCAL, sorteosAgregados: extra, repeticiones: REPS, corridas: CORRIDAS,
+      aprendidoPorSorteo: Object.fromEntries(Object.entries(APRC).map(([f,a])=>[f,{ vueltas:a.vueltas, arriba:[...Array(MAX).keys()].map(i=>i+1).sort((x,y)=>a.w[y]-a.w[x]).slice(0,10) }])),
       afinado: AFIN,
       entrenamientos: ENTRENOS.slice(-10).map(e=>({ fecha:e.fecha, sorteos:e.sorteos, segundos:e.segundos, cambio:e.cambio, formas:e.formas })),
       formaDeJugar: cfgPistas(),
