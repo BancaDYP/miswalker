@@ -1712,15 +1712,27 @@ const CLAVE_METODO = "loto_metodo_v1";
 let METODO = (()=>{ try { return JSON.parse(localStorage.getItem(CLAVE_METODO)) || null; } catch(e){ return null; } })() || { m:{ calientes:1, recientes:1, atrasados:1, arrastre:1 }, vistos:{}, n:0, historia:[] };
 function guardarMetodo(){ try { localStorage.setItem(CLAVE_METODO, JSON.stringify(METODO)); } catch(e){} }
 function aprenderMetodo(C){
-  if(!C.f || !C.R || METODO.vistos[C.f]) return null;
+  if(!C.f || !C.R) return null;
+  const repetido = !!METODO.vistos[C.f];
   const cob = {}, antes = { ...METODO.m };
   MET.forEach(k=>{ cob[k] = C.real.filter(n=>C.R[k][n]<=10).length;
     METODO.m[k] = Math.min(5, Math.max(0.2, METODO.m[k]*Math.exp(0.15*(cob[k]-1.5)))); });
-  METODO.vistos[C.f] = true; METODO.n++;
+  if(!repetido){ METODO.vistos[C.f] = true; METODO.n++; }
   METODO.historia.push({ f: C.f, cob, primeraAciertos: C.mejorJugada.filter(n=>C.real.includes(n)).length, intentos: C.intentos, encontrada: !!C.encontrada });
   if(METODO.historia.length>300) METODO.historia.splice(0, METODO.historia.length-300);
   guardarMetodo();
-  return { cob, antes };
+  return { cob, antes, repetido, tope: topeMetodo(C) };
+}
+/* Lo máximo que sus métodos podrían acertar a la primera en este sorteo,
+   aunque se ajustaran perfecto sabiendo la respuesta */
+function topeMetodo(C){
+  const H = historial().filter(h=>h.fecha<C.f); if(H.length<3) return null;
+  const D = construirDiario(H), g = [0,0.25,0.5,1,2,4,8]; let best = 0;
+  for(const a of g) for(const b of g) for(const c of g) for(const d of g){ if(a+b+c+d===0) continue;
+    const w = pesosCorrida(D.S, { a:2, m:[a,b,c,d] });
+    const top = [...Array(MAX).keys()].map(i=>i+1).sort((x,y)=>w[y]-w[x]).slice(0,K);
+    best = Math.max(best, top.filter(n=>C.real.includes(n)).length); if(best===6) return 6; }
+  return best;
 }
 function textoMetodo(){
   const h = METODO.historia, prom = h.length ? h.reduce((a,x)=>a+x.primeraAciertos,0)/h.length : null;
@@ -1801,7 +1813,8 @@ function textoVueltas(C){
     <div class="note">${ult.intentos===1 && ult.encontrada ? "🎯 Ya lo pega a la primera con este sorteo." : "👉 Dale otra vez a 🎲 con este mismo sorteo: arranca con lo aprendido."}</div>
     <div class="sub" style="margin-top:8px">🧩 <b>El método</b> (sirve para todos los sorteos y no se borra)</div>
     ${C.metodoAprendido ? `<div class="note">De este sorteo aprendió: ${MET.map(k=>`${nombreCorto[k]} tenía ${C.metodoAprendido.cob[k]} de los 6 arriba ${C.metodoAprendido.cob[k]>=2?"✅":C.metodoAprendido.cob[k]===0?"❌":"➖"}`).join(" · ")}</div>`
-      : `<div class="note">Este sorteo ya le enseñó al método antes: repetirlo no le enseña nada nuevo al método. Para mejorar el método, pásale el siguiente sorteo.</div>`}
+      : ""}
+    ${C.metodoAprendido && C.metodoAprendido.tope!=null ? `<div class="note">🔒 <b>Tope de sus métodos en este sorteo: ${C.metodoAprendido.tope} de 6.</b> Es lo máximo que su primera jugada podría acertar con solo sus métodos, aunque se ajustaran perfecto para este sorteo. ${C.metodoAprendido.tope<6 ? "Para pegarlo a la primera sin acordarse del sorteo, necesitaría un método que todavía no tiene." : "Con sus métodos sí se puede pegar a la primera."}${C.metodoAprendido.repetido ? " (Este sorteo ya lo había visto: el método vuelve a ajustarse con él.)" : ""}</div>` : ""}
     <div class="note">${textoMetodo()}</div>
     <div style="margin-top:6px"><button class="sec" onclick="if(confirm('¿Que olvide lo aprendido con este sorteo?')){ delete APRC['${C.f}']; guardarAprc(); this.textContent='Olvidado'; }">🔄 Que olvide este sorteo</button></div>`;
 }
