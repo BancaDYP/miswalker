@@ -78,16 +78,10 @@
     <label for="realComp">Sorteo real (solo para que tú compares; el sistema no lo ve ni se guarda)</label>
     <input id="realComp" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej: 11,15,16,20,29,31">
     <div id="realAviso" class="note" style="margin-top:4px"></div>
-    <div class="flex" style="margin-top:12px">
-      <button id="btnNueva">🎯 Con pistas</button>
-      <button id="btnSinPistas" style="background:var(--acc);color:#04210f">🔮 Sin pistas</button>
-    </div>
-    <div style="margin-top:8px"><button id="btnAuto" style="background:#8b5cf6">🤖 Buscar solo (usa el sorteo real de arriba)</button></div>
-    <div id="autoMsg" class="note" style="margin-top:6px"></div>
-    <div style="margin-top:8px"><button id="btnCorrida" style="background:#0ea5e9">🎲 Corrida sin pistas (no le dice nada, para solo con los 6)</button></div>
+    <div style="margin-top:12px"><button id="btnCorrida" style="background:#0ea5e9">🎲 Buscar solo sin pistas</button></div>
     <div id="corridaBox" style="margin-top:8px"></div>
-    <div style="margin-top:8px"><button id="btnSim" style="background:#334155">🌙 Simulador: el robot juega solo todos los sorteos guardados</button></div>
-    <div id="simBox" style="margin-top:8px"></div>
+    <div style="margin-top:8px"><button id="btnAuto" style="background:#8b5cf6">🤖 Buscar solo con pistas</button></div>
+    <div id="autoMsg" class="note" style="margin-top:6px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
     <div id="juego" style="margin-top:10px"></div>
   </section>
@@ -110,6 +104,9 @@
     </div>
   </div>
 
+  <!-- TODO LO DEMÁS, ESCONDIDO -->
+  <details id="avanzado">
+    <summary class="sub" style="padding:10px 4px">⚙️ Ver más opciones</summary>
   <!-- Enviar a Claude -->
   <div style="margin:4px 0 8px">
     <button id="btnReporte" class="sec">📤 Copiar para Claude</button>
@@ -117,9 +114,12 @@
     <textarea id="repTxt" readonly style="display:none;width:100%;height:120px;margin-top:6px;background:#11141a;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px"></textarea>
   </div>
 
-  <!-- TODO LO DEMÁS, ESCONDIDO -->
-  <details id="avanzado">
-    <summary class="sub" style="padding:10px 4px">⚙️ Ver más opciones</summary>
+    <div class="flex" style="margin-top:6px">
+      <button id="btnNueva">🎯 Con pistas (tú le das las pistas)</button>
+      <button id="btnSinPistas" style="background:var(--acc);color:#04210f">🔮 Sin pistas</button>
+    </div>
+    <div style="margin-top:8px"><button id="btnSim" style="background:#334155">🌙 Simulador: el robot juega solo todos los sorteos guardados</button></div>
+    <div id="simBox" style="margin-top:8px"></div>
     <div style="margin-top:6px"><button id="btnAfinar" class="sec">🧠 Afinar con lo que hizo</button></div>
     <div id="afinMsg" class="note" style="margin-top:6px"></div>
     <div style="margin-top:8px"><button id="btnEntrenar" style="background:#7c3aed">🎓 Entrenar jugando solo</button></div>
