@@ -268,6 +268,9 @@ const HISTORIAL_BASE = [
    ========================================================= */
 const HISTORIAL_ARCHIVO = [
   { fecha: "2020-11-03", nums: [9,12,24,28,36,37] },  // encontrado con pistas el 02-11-2026
+  { fecha: "2020-11-17", nums: [5,7,18,24,26,37] },  // dado en corrida el 02-11-2026
+  { fecha: "2020-11-13", nums: [5,13,14,17,25,35] },  // dado en corrida el 02-11-2026
+  { fecha: "2020-11-10", nums: [2,8,12,23,31,37] },  // dado en corrida el 02-11-2026
   { fecha: "2020-11-06", nums: [3,5,11,24,31,33] },  // encontrado con pistas el 02-11-2026
   { fecha: "2020-09-05", nums: [1,10,16,28,34,35] },  // encontrado con pistas el 02-11-2026
   { fecha: "2020-09-09", nums: [2,7,8,10,27,30] },  // encontrado con pistas el 02-11-2026
@@ -1725,12 +1728,14 @@ function analisisCorrida(C){
     const met = C.R ? Object.keys(METODOS).map(k=>({ k, p: C.R[k][n] })).sort((a,b)=>a.p-b.p)[0] : null;
     return { n, puesto: puestoPeso[n], veces3: C.porNumero[n], metodo: met && met.p<=10 ? `${nombreCorto[met.k]} (#${met.p})` : "ningún método lo tenía arriba" };
   }).sort((a,b)=>a.puesto-b.puesto);
-  return { primeros: { ...C.primeros, 6: C.encontrada ? C.intentos : null }, porNum };
+  const n = C.intentos||1, t3 = (C.dist[3]+C.dist[4]+C.dist[5]+C.dist[6])/n, AZ3 = 0.03336;
+  return { primeros: { ...C.primeros, 6: C.encontrada ? C.intentos : null }, porNum, tasa3: t3, nota: t3/AZ3 };
 }
 function textoAnalisisCorrida(A){
   const hit = k => A.primeros[k] ? `#${A.primeros[k].toLocaleString("es-DO")}` : "—";
   const fuertes = A.porNum.filter(x=>x.puesto<=10).map(x=>x.n), debiles = A.porNum.filter(x=>x.puesto>25).map(x=>x.n);
-  return `<div class="sub" style="margin-top:8px">📋 <b>Lo que hizo</b></div>
+  const nota = A.nota ? `<div class="note"><b>Nota de esta corrida: ${A.nota.toFixed(2)}</b> — ${(A.tasa3*100).toFixed(2)}% de sus intentos pegaron 3 o más; tirando parejo sería 3.34%. ${A.nota>=1.08 ? "✅ Bien: tenía los números del sorteo más arriba que el azar." : A.nota<=0.92 ? "❌ Mal: los tenía más abajo que el azar." : "➖ Igual que el azar."} (Lo rápido que llega al 6 es mayormente suerte; esta nota es lo que mide si apuntó bien.)</div>` : "";
+  return `<div class="sub" style="margin-top:8px">📋 <b>Lo que hizo</b></div>${nota}
     <div class="note">Primera vez que pegó 2: ${hit(2)} · 3: ${hit(3)} · 4: ${hit(4)} · 5: ${hit(5)} · 6: ${hit(6)}</div>
     <div class="note">Cada número del sorteo, según qué tan arriba lo tenía el robot (de 40):<br>${A.porNum.map(x=>`<b>${x.n}</b> → puesto ${x.puesto}, ${x.metodo}, salió en ${x.veces3.toLocaleString("es-DO")} intentos de 3+`).join("<br>")}</div>
     <div class="note">${fuertes.length ? `Los tenía arriba: ${fuertes.join(", ")}. ` : ""}${debiles.length ? `Los tenía abajo: ${debiles.join(", ")} → esos lo hicieron tardar.` : "Ninguno estaba muy abajo."}</div>
