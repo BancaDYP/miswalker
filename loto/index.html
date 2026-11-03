@@ -1672,9 +1672,12 @@ function iniciarCorrida(){
   const { R } = H.length>=3 ? rangos(f) : { R:null };
   CORRIDA = { f, real, w, R, visto: new Uint8Array(Math.ceil(combinaciones(MAX,K)/8)+1), intentos: 0, dist: [0,0,0,0,0,0,0],
               mejores: [], porNumero: new Array(MAX+1).fill(0), metodos: { calientes:0, recientes:0, atrasados:0, arrastre:0, forma:0 },
-              inicio: Date.now(), corriendo: true, encontrada: null, ultimoPintado: 0 };
-  $("corridaBox").innerHTML = `<div id="corridaDatos"></div><div style="margin-top:8px"><button id="btnPararCorrida" class="sec">⏹️ Detener</button></div>`;
+              inicio: Date.now(), corriendo: true, encontrada: null, ultimoPintado: 0,
+              lenta: true, registro: [], ultimo: null };
+  $("corridaBox").innerHTML = `<div id="corridaDatos"></div><div class="flex" style="margin-top:8px">
+      <button id="btnVelCorrida" class="sec">⚡ Pasar a rápida</button><button id="btnPararCorrida" class="sec">⏹️ Detener</button></div>`;
   $("btnPararCorrida").onclick = ()=>{ if(CORRIDA) CORRIDA.corriendo = false; };
+  $("btnVelCorrida").onclick = ()=>{ if(!CORRIDA) return; CORRIDA.lenta = !CORRIDA.lenta; $("btnVelCorrida").textContent = CORRIDA.lenta ? "⚡ Pasar a rápida" : "👀 Pasar a lenta (ver cada una)"; };
   pasoCorrida();
 }
 function tirarCombo(w){
@@ -1687,11 +1690,14 @@ function pasoCorrida(){
   const C = CORRIDA; if(!C) return;
   if(!C.corriendo){ if(!C.finalizada){ C.finalizada = true; terminarCorrida(); } return; }
   const t0 = performance.now();
-  while(performance.now()-t0 < 120){
+  const limite = C.lenta ? 1 : Infinity; let hechos = 0;
+  while(performance.now()-t0 < 120 && hechos < limite){
     const c = tirarCombo(C.w), r = rangoCombo(c), byte = r>>3, bit = 1<<(r&7);
     if(C.visto[byte] & bit) continue;            // ya la probó: no la repite
-    C.visto[byte] |= bit; C.intentos++;
+    C.visto[byte] |= bit; C.intentos++; hechos++;
     const ac = c.filter(n=>C.real.includes(n)); C.dist[ac.length]++;
+    C.ultimo = { combo: c, cuales: ac };
+    if(ac.length >= (C.lenta ? 2 : 3)){ C.registro.push({ i: C.intentos, aciertos: ac.length, cuales: ac, combo: c }); if(C.registro.length>1500) C.registro.splice(0, C.registro.length-1000); }
     if(ac.length>=3){
       ac.forEach(n=>{ C.porNumero[n]++;
         if(C.R){ const m = Object.keys(METODOS).filter(k=>C.R[k][n]<=10); if(m.length) m.forEach(k=>C.metodos[k]++); else C.metodos.forma++; } });
@@ -1699,15 +1705,16 @@ function pasoCorrida(){
     }
     if(ac.length===6){ C.encontrada = c; C.corriendo = false; break; }
   }
-  if(Date.now()-C.ultimoPintado > 500){ C.ultimoPintado = Date.now(); pintarCorrida(); }
-  setTimeout(pasoCorrida, 0);
+  if(C.lenta || Date.now()-C.ultimoPintado > 500){ C.ultimoPintado = Date.now(); pintarCorrida(); }
+  setTimeout(pasoCorrida, C.lenta ? 350 : 0);
 }
 function terminarCorrida(){
   const C = CORRIDA; if(!C) return;
   const seg = (Date.now()-C.inicio)/1000;
   const reg = { fecha: hoyISO(), encontrada: !!C.encontrada, intentos: C.intentos, segundos: Math.round(seg), dist: C.dist,
     mejores: [...C.mejores].sort((a,b)=>b.aciertos-a.aciertos).slice(0,30),
-    numerosEnAciertos3omas: Object.fromEntries(C.porNumero.map((v,n)=>[n,v]).filter(([n,v])=>v>0)), metodos: C.metodos };
+    numerosEnAciertos3omas: Object.fromEntries(C.porNumero.map((v,n)=>[n,v]).filter(([n,v])=>v>0)), metodos: C.metodos,
+    registro: [...C.registro].sort((a,b)=>b.aciertos-a.aciertos || a.i-b.i).slice(0,300).map(x=>({ i:x.i, aciertos:x.aciertos, cuales:x.cuales })) };
   if(C.f){ (CORRIDAS[C.f] = CORRIDAS[C.f] || []).push(reg); guardarCorridas(); }
   pintarCorrida(true);
 }
@@ -1724,7 +1731,11 @@ function pintarCorrida(final){
     <div class="grid" style="margin-top:8px">
       <div class="stat"><b>${C.intentos.toLocaleString("es-DO")}</b><span>Combinaciones probadas (sin repetir)</span></div>
       <div class="stat"><b>${Math.round(seg)} s</b><span>Tiempo</span></div></div>
+    ${C.ultimo && !final ? `<div class="sub" style="margin-top:8px">Probando ahora (intento ${C.intentos.toLocaleString("es-DO")}): <b class="${C.ultimo.cuales.length>=3?'ok':''}">${C.ultimo.cuales.length} coinciden</b></div>
+      <div class="balls" style="margin:6px 0">${C.ultimo.combo.map(n=>`<div class="ball ${C.real.includes(n)?'match':''}">${n}</div>`).join("")}</div>` : ""}
     <div class="note" style="margin-top:6px">Veces que acertó → ${C.dist.map((v,i)=>`${i}: ${v.toLocaleString("es-DO")}`).join(" · ")}</div>
+    ${C.registro.length ? `<details ${C.lenta?"open":""} style="margin-top:6px"><summary class="note">📝 Registro: dónde pegó ${C.lenta?"2 o más":"3 o más"} (${C.registro.length})</summary>
+      ${[...C.registro].reverse().slice(0,25).map(x=>`<div class="note">#${x.i.toLocaleString("es-DO")}: <b>${x.aciertos}</b> aciertos → ${x.cuales.join(", ")}</div>`).join("")}</details>` : ""}
     ${numTop.length ? `<div class="note">Números que más aparecieron en los intentos de 3 o más: ${numTop.map(x=>`${x.n} (${x.v})`).join(", ")}</div>` : ""}
     ${C.R && totM>1 ? `<div class="note">En esos aciertos, el número venía de: ${Object.keys(C.metodos).map(k=>`${k==="forma"?"la forma / azar":nombreCorto[k]} ${Math.round(C.metodos[k]/totM*100)}%`).join(" · ")}</div>` : ""}
     ${top.length ? `<div class="sub" style="margin-top:6px">Mejores intentos:</div>${top.map(x=>`<div class="row"><span class="date">#${x.intento.toLocaleString("es-DO")}</span><div class="balls">${x.combo.map(n=>`<div class="ball ${C.real.includes(n)?'match':''}">${n}</div>`).join("")}</div><div class="score"><b class="ok">${x.aciertos}/6</b></div></div>`).join("")}` : ""}
