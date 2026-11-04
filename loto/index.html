@@ -75,12 +75,14 @@
     <label for="fechaDes" style="margin-top:0">Fecha del sorteo</label>
     <input id="fechaDes" type="hidden">
     <button id="fechaBtn" class="fechaBtn">📅 Elegir fecha</button>
-    <label for="realComp">Sorteo real (solo para que tú compares; el sistema no lo ve ni se guarda)</label>
+    <label for="realComp">Sorteo real (para guardarlo cuando salga, o para comparar en "Con pistas")</label>
     <input id="realComp" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej: 11,15,16,20,29,31">
     <div id="realAviso" class="note" style="margin-top:4px"></div>
     <div style="margin-top:12px"><button id="btnInsp" style="background:#0ea5e9">🎲 Buscar solo sin pistas</button></div>
     <div id="inspBox" style="margin-top:8px"></div>
-    <div style="margin-top:8px"><button id="btnAuto" style="background:#8b5cf6">🤖 Buscar solo con pistas</button></div>
+    <div style="margin-top:8px"><button id="btnGuardarReal" style="background:#16a34a">📝 Guardar el sorteo que salió</button></div>
+    <div id="guardarMsg" class="note" style="margin-top:6px"></div>
+    <div style="margin-top:8px"><button id="btnNueva" style="background:#8b5cf6">🎯 Con pistas (sorteos viejos que faltan)</button></div>
     <div id="autoMsg" class="note" style="margin-top:6px"></div>
     <div id="sinPistasRes" style="margin-top:10px"></div>
     <div id="juego" style="margin-top:10px"></div>
@@ -117,7 +119,7 @@
     <div style="margin-top:6px"><button id="btnCorrida" style="background:#0e7490">🎲 Corrida (busca hasta pegar los 6)</button></div>
     <div id="corridaBox" style="margin-top:8px"></div>
     <div class="flex" style="margin-top:6px">
-      <button id="btnNueva">🎯 Con pistas (tú le das las pistas)</button>
+      <button id="btnAuto" style="background:#8b5cf6">🤖 Buscar solo con pistas</button>
       <button id="btnSinPistas" style="background:var(--acc);color:#04210f">🔮 Sin pistas</button>
     </div>
     <div style="margin-top:8px"><button id="btnSim" style="background:#334155">🌙 Simulador: el robot juega solo todos los sorteos guardados</button></div>
@@ -2212,6 +2214,24 @@ function revisarSorteo(Eantes, real, w, Jw, combosDados){
 function textoMezcla(ww, j){ const p = SENALES.filter(k=>ww[k]>0).sort((a,b)=>ww[b]-ww[a]).map(k=>`${NOMBRE_SEN[k]} ×${ww[k]}`); if(j>0) p.push(`salen juntos ×${j}`); return p.join(", ") || "nada"; }
 const bolasR = (c, real) => `<div class="balls">${c.map(n=>`<div class="ball ${real && real.includes(n)?'match':''}">${n}</div>`).join("")}</div>`;
 
+/* Guardar el sorteo real que salió (el último) y revisar las 4 */
+function guardarSorteoReal(){
+  const box = $("guardarMsg"), real = realComp();
+  if(!real || real.length!==6){ box.innerHTML = '<span class="bad">Escribe arriba los 6 números del sorteo que salió.</span>'; return; }
+  if(new Set(real).size!==6 || real.some(n=>n<1||n>40)){ box.innerHTML = '<span class="bad">Tienen que ser 6 números distintos, del 1 al 40.</span>'; return; }
+  const ult = historial().slice(-1)[0], pend = Object.keys(PRED4).filter(f=>!PRED4[f].real).sort().pop();
+  const fSel = $("fechaDes").value, f = fSel && fSel>ult.fecha ? fSel : (pend || proximoSorteo(ult.fecha));
+  if(historial().some(h=>h.fecha===f)){ box.innerHTML = `<span class="bad">El sorteo del ${fmtFecha(f)} ya está guardado.</span>`; return; }
+  const nums = [...real].sort((a,b)=>a-b);
+  if(!box.dataset.ok || box.dataset.ok!==f+nums.join()){ box.dataset.ok = f+nums.join();
+    box.innerHTML = `¿Guardar el sorteo del <b>${fmtFecha(f)}</b>: <b>${nums.join(", ")}</b>? Toca otra vez para confirmar.`; return; }
+  box.dataset.ok = "";
+  extra.push({ fecha: f, nums }); guardarExtra(extra);
+  if(PRED4[f]){ PRED4[f].real = nums; guardarP4(); }
+  $("realComp").value = ""; if($("realAviso")) $("realAviso").textContent = "";
+  box.innerHTML = `<span class="ok">✅ Guardado el sorteo del ${fmtFecha(f)}. Abajo está la revisión y las 4 del próximo.</span>`;
+  inspeccion();
+}
 function inspeccion(){
   const box = $("inspBox"); box.innerHTML = "🔎 Revisando todos los sorteos y partidas…";
   setTimeout(()=>{
@@ -2431,6 +2451,7 @@ function iniciarDesafio(){
   if(AFIN) $("afinMsg").innerHTML = textoAfinado();
   $("btnEntrenar").onclick = iniciarEntreno;
   $("btnInsp").onclick = inspeccion;
+  $("btnGuardarReal").onclick = guardarSorteoReal;
   if(ENTRENOS.length){ const u = ENTRENOS[ENTRENOS.length-1]; $("entBox").innerHTML = `Último entrenamiento: su forma actual promedió ${u.formas[0].prom.toFixed(2)} intentos en ${u.sorteos} sorteos${u.cambio?` y aprendió con la ${u.cambio}`:""}.`; }
   $("btnSim").onclick = ()=>{ if($("simBox").innerHTML) { $("simBox").innerHTML = ""; return; } pintarSimulador(); };
   $("btnCorrida").onclick = ()=>{ if(CORRIDA && CORRIDA.corriendo) return; iniciarCorrida(); };
