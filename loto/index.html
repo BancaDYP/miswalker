@@ -267,7 +267,8 @@ const HISTORIAL_BASE = [
   { fecha: "2026-10-21", nums: [9,10,17,24,29,30] },
   { fecha: "2026-10-24", nums: [10,18,27,29,35,39] },
   { fecha: "2026-10-28", nums: [13,17,18,20,28,37] },
-  { fecha: "2026-10-31", nums: [8,11,13,14,23,38] }
+  { fecha: "2026-10-31", nums: [8,11,13,14,23,38] },
+  { fecha: "2026-11-04", nums: [10,15,26,28,34,36] }   // guardado por el usuario el 04-11-2026
 ];
 
 /* =========================================================
@@ -2198,7 +2199,7 @@ function repasarTodo(){
 /* Lo que pasó en un sorteo y cómo lo habría acertado */
 function revisarSorteo(Eantes, real, w, Jw, combosDados){
   const S = senales(Eantes), L = liftDe(Eantes), sc = puntajeSen(S, w), R = {}; SENALES.forEach(k=>R[k] = rankDe(S[k])); const Rsc = rankDe(sc);
-  const combos = combosDados || cuatroCombos(sc, L, Jw, Eantes.H.length ? Eantes.H[Eantes.H.length-1].nums : null), ac = combos.map(c=>c.filter(n=>real.includes(n)));
+  const combos = combosDados || cuatroCombos(sc, L, Jw, Eantes.H.length ? Eantes.H[Eantes.H.length-1].nums : null).slice(0,1), ac = combos.map(c=>c.filter(n=>real.includes(n)));
   const porNum = real.map(n=>{ const mej = SENALES.map(k=>({ k, p:R[k][n] })).sort((a,b)=>a.p-b.p)[0];
     const comp = real.filter(m=>m!==n).map(m=>({ m, l:L[n][m] })).sort((a,b)=>b.l-a.l)[0];
     return { n, puesto:Rsc[n], senal: mej.p<=10 ? `${NOMBRE_SEN[mej.k]} (#${mej.p})` : null, comp }; });
@@ -2236,6 +2237,44 @@ function guardarSorteoReal(){
   inspeccion();
 }
 /* Análisis del último sorteo: cómo salió y qué suele venir después */
+/* ¿Había huellas que llevaran a la combinación que salió? */
+function huellas(Eantes, real, w, Jw){
+  const S = senales(Eantes), L = liftDe(Eantes), sc = puntajeSen(S, w), R = {}; SENALES.forEach(k=>R[k] = rankDe(S[k]));
+  const ultPrev = Eantes.H.length ? Eantes.H[Eantes.H.length-1].nums : null;
+  const porNum = [...real].sort((a,b)=>a-b).map(n=>{
+    const fuertes = SENALES.filter(k=>R[k][n]<=6).map(k=>`${NOMBRE_SEN[k].split(" (")[0]} #${R[k][n]}`);
+    const debiles = SENALES.filter(k=>R[k][n]>6 && R[k][n]<=10).map(k=>`${NOMBRE_SEN[k].split(" (")[0]} #${R[k][n]}`);
+    const comp = real.filter(m=>m!==n).map(m=>({ m, l:L[n][m] })).sort((a,b)=>b.l-a.l)[0];
+    const repetido = ultPrev && ultPrev.includes(n);
+    return { n, fuertes, debiles, comp, repetido };
+  });
+  // la mejor jugada única que cualquier mezcla de señales habría dado
+  const g = [0,0.5,1,2,4], gj = [0,1,2,4]; let mejor = { k:-1 };
+  for(const a of g) for(const b of g) for(const c of g) for(const d of g){ if(a+b+c+d===0) continue;
+    const ww = { calientes:a, recientes:b, atrasados:c, arrastre:d }, s2 = puntajeSen(S, ww);
+    for(const j of gj){ const combo = cuatroCombos(s2, L, j, ultPrev)[0], k = combo.filter(n=>real.includes(n)).length;
+      if(k>mejor.k) mejor = { k, ww, j, combo }; } }
+  // puesto de la combinación real según el robot (de 3,838,380)
+  const v = sc, objetivo = real.reduce((a,n)=>a+v[n],0) - 1e-9; let encima = 0;
+  for(let a=1;a<=35;a++){ const sa = v[a]; for(let b=a+1;b<=36;b++){ const sb = sa+v[b]; for(let c=b+1;c<=37;c++){ const scc = sb+v[c];
+    for(let d=c+1;d<=38;d++){ const sd = scc+v[d]; for(let e=d+1;e<=39;e++){ const se = sd+v[e]; for(let f=e+1;f<=40;f++) if(se+v[f]>objetivo) encima++; } } } } }
+  return { porNum, mejor, puesto: encima+1 };
+}
+function textoHuellas(Hu, dadas, real){
+  const conHuella = Hu.porNum.filter(p=>p.fuertes.length), sinNada = Hu.porNum.filter(p=>!p.fuertes.length && !p.debiles.length);
+  const enDadas = [...new Set(dadas.flat())].filter(n=>real.includes(n)).sort((a,b)=>a-b);
+  const veredicto = Hu.mejor.k===6
+    ? `✅ <b>Sí había huella.</b> Mezclando ${textoMezcla(Hu.mejor.ww, Hu.mejor.j)}, mi jugada habría sido exactamente esa.`
+    : Hu.mejor.k>=4
+      ? `🟡 <b>Había huellas, pero no completas.</b> Lo más cerca que podía llegar con lo que sé mirar era <b>${Hu.mejor.k} de 6</b> (${Hu.mejor.combo.join(", ")}, mezclando ${textoMezcla(Hu.mejor.ww, Hu.mejor.j)}).`
+      : `❌ <b>No había huella.</b> Ninguna mezcla de lo que sé mirar llevaba a esa combinación: lo máximo era <b>${Hu.mejor.k} de 6</b>.`;
+  return `<div class="sub" style="margin-top:10px">🧭 <b>¿Algo me hubiera llevado a esa combinación?</b></div>
+    <div class="note">${veredicto}</div>
+    ${enDadas.length ? `<div class="note">En lo que te di estaban <b>${enDadas.length} de los 6</b> (${enDadas.join(", ")})${dadas.length>1 && enDadas.length>Math.max(...dadas.map(c=>c.filter(n=>real.includes(n)).length)) ? ", pero repartidos en varias combinaciones" : ""}.</div>` : ""}
+    <div class="note">${Hu.porNum.map(p=>`<b>${p.n}</b>: ${p.fuertes.length ? `✅ huella clara (${p.fuertes.join(", ")})` : p.debiles.length ? `🟡 huella débil (${p.debiles.join(", ")})` : "❌ sin huella"}${p.repetido ? " · repetido del sorteo anterior" : ""}${p.comp && p.comp.l>=1.4 ? ` · sale con el ${p.comp.m} ×${p.comp.l.toFixed(1)}` : ""}`).join("<br>")}</div>
+    <div class="note">Resumen: ${conHuella.length} con huella clara, ${6-conHuella.length-sinNada.length} con huella débil y ${sinNada.length} sin ninguna${sinNada.length ? ` (${sinNada.map(p=>p.n).join(", ")})` : ""}. Para mi análisis, esa combinación estaba en el puesto <b>${Hu.puesto.toLocaleString("es-DO")}</b> de 3,838,380${Hu.puesto<=383838 ? " (entre el 10% que más me gustaba)" : Hu.puesto>=3454542 ? " (entre el 10% que menos me gustaba)" : ""}.</div>`;
+}
+
 function analisisUltimo(E){
   const T = E.H, n = T.length, ult = T[n-1].nums, prev = n>1 ? T[n-2].nums : [];
   const sumas = T.map(h=>h.nums.reduce((a,b)=>a+b,0)), suma = sumas[n-1];
@@ -2267,7 +2306,7 @@ function otraJugada(){
   const P = PRED4[prox] || (PRED4[prox] = { combos: [], generada: new Date().toISOString() });
   P.extras = P.extras || []; const vistos = new Set([...(P.combos||[]), ...P.extras].map(c=>c.join("-")));
   const nuevas = []; let intentos = 0;
-  while(nuevas.length<4 && intentos<400){ intentos++;
+  while(nuevas.length<1 && intentos<400){ intentos++;
     const combo = [];
     if(Math.random()<0.5){ const u = [...ult].sort((a,b)=>sc[b]-sc[a]).slice(0,3); combo.push(u[Math.floor(Math.random()*u.length)]); }
     while(combo.length<K){ let tot = 0; const w = new Array(MAX+1).fill(0);
@@ -2277,7 +2316,7 @@ function otraJugada(){
     combo.sort((a,b)=>a-b); const k = combo.join("-"); if(!vistos.has(k)){ vistos.add(k); nuevas.push(combo); } }
   P.extras.push(...nuevas); guardarP4();
   const box = $("extrasBox");
-  box.innerHTML = `<div class="note" style="margin-top:6px">🔄 Otra jugada (${P.extras.length/4|0}ª): sale de los mismos puntajes, sorteando entre los números más fuertes, así que cambia cada vez.</div>` +
+  box.innerHTML = `<div class="note" style="margin-top:6px">🔄 Otra opción (${P.extras.length}ª): sale de los mismos puntajes, sorteando entre los números más fuertes, así que cambia cada vez. La jugada principal sigue siendo la de arriba.</div>` +
     nuevas.map((c,i)=>`<div class="row"><span class="date">${i+1}</span>${bolasR(c, null)}</div>`).join("");
 }
 
@@ -2304,6 +2343,7 @@ function inspeccion(){
     const Eant = estadoNuevo(); T.slice(0,-1).forEach(h=>estadoAgregar(Eant, h));
     const wAnt = { ...Rr.w }; // pesos casi iguales; para la revisión basta
     const dados = PRED4[ult.fecha] && PRED4[ult.fecha].combos;
+    const Hu = huellas(Eant, ult.nums, wAnt, Rr.Jw);
     const Rv = revisarSorteo(Eant, ult.nums, wAnt, Rr.Jw, dados);
     // 4) Las 4 para el próximo
     const prox = proximoSorteo(ult.fecha);
@@ -2312,7 +2352,7 @@ function inspeccion(){
     const Rk = {}; SENALES.forEach(k=>Rk[k] = rankDe(S[k]));
     if(!PRED4[prox]){ PRED4[prox] = { combos, generada: new Date().toISOString(), base: ult.fecha }; guardarP4(); }
     else if(!PRED4[prox].combos || !PRED4[prox].combos.length){ PRED4[prox].combos = combos; PRED4[prox].base = ult.fecha; guardarP4(); }
-    const mostrar = PRED4[prox].combos;   // las que ya te dio para ese sorteo no cambian
+    const mostrar = PRED4[prox].combos.slice(0,1);   // una sola jugada; la que ya te dio para ese sorteo no cambia
     const porque = c => c.map(x=>{ const m = SENALES.filter(k=>Rk[k][x]<=6).map(k=>NOMBRE_SEN[k].split(" (")[0]); if(m.length) return `${x}: ${m.join(" + ")}`;
       const l = c.filter(y=>y!==x).reduce((a,y)=>a+L[x][y],0)/(K-1); return l>=1.15 ? `${x}: sale junto a estos (×${l.toFixed(1)})` : `${x}: para cubrir otros números`; }).join(" · ");
     const pesosTxt = SENALES.map(k=>`${NOMBRE_SEN[k].split(" (")[0]} ×${Rr.w[k].toFixed(2)}`).join(" · ") + ` · salen juntos ×${Rr.Jw.toFixed(2)}`;
@@ -2325,18 +2365,19 @@ function inspeccion(){
 
       <div class="sub" style="margin-top:10px">👀 <b>Último sorteo: ${fmtFecha(ult.fecha)}</b></div>
       ${bolasR(ult.nums, ult.nums)}
-      <div class="note">${dados ? "Las 4 que te di" : "Las 4 que habría tirado"} para ese sorteo:</div>
+      <div class="note">${dados ? (dados.length>1 ? "Las que te di" : "La jugada que te di") : "La jugada que habría tirado"} para ese sorteo:</div>
       ${Rv.combos.map((c,i)=>`<div class="row"><span class="date">${i+1}</span>${bolasR(c, ult.nums)}<div class="score"><b class="${Rv.ac[i].length>=3?'ok':''}">${Rv.ac[i].length}/6</b></div></div>`).join("")}
       <div class="note">${Rv.ac.some(a=>a.length>=3) ? `✅ Donde acertó: ${Rv.ac.map((a,i)=>a.length>=3?`combinación ${i+1} con ${a.join(", ")}`:null).filter(Boolean).join("; ")}.` : "Ninguna llegó a 3."} ${Rv.ac.some(a=>a.length===0) ? `❌ Descarta lo que no dio nada: ${Rv.ac.map((a,i)=>a.length===0?`combinación ${i+1}`:null).filter(Boolean).join(", ")}.` : ""}</div>
       ${PRED4[ult.fecha] && PRED4[ult.fecha].extras && PRED4[ult.fecha].extras.length ? `<div class="note">🔄 Jugadas extra que pediste (${PRED4[ult.fecha].extras.length}): la mejor acertó <b>${Math.max(...PRED4[ult.fecha].extras.map(c=>c.filter(n=>ult.nums.includes(n)).length))} de 6</b>.</div>` : ""}
+      ${textoHuellas(Hu, [...(dados||Rv.combos), ...((PRED4[ult.fecha]&&PRED4[ult.fecha].extras)||[])], ult.nums)}
       <div class="note"><b>¿Por qué salió cada número?</b><br>${Rv.porNum.map(x=>`<b>${x.n}</b>: puesto ${x.puesto} de 40 · ${x.senal ? `lo tenía ${x.senal}` : "❌ ninguna señal lo tenía arriba"}${x.comp && x.comp.l>=1.3 ? ` · sale con el ${x.comp.m} ${x.comp.l.toFixed(1)} veces más de lo normal` : ""}`).join("<br>")}</div>
       ${Rv.pares.length ? `<div class="note">🤝 Parejas de ese sorteo que salen juntas más de lo normal: ${Rv.pares.slice(0,4).map(p=>`${p.a} y ${p.b} (${p.veces} veces, ×${p.l.toFixed(1)})`).join(", ")}.</div>` : ""}
       <div class="note">🤔 <b>Si yo hubiera hecho esto…</b> usando ${textoMezcla(Rv.tope.ww, Rv.tope.j)}, una de las 4 habría sido ${Rv.tope.combo.join(", ")} → <b>${Rv.tope.k} de 6</b>. ${Rv.tope.k<6 ? `Es lo máximo que podía con lo que sabe mirar; para los que faltaron necesitaría otra pista.` : "¡Con eso lo habría acertado completo!"}</div>
 
       ${textoUltimo(AU)}
-      <div class="sub" style="margin-top:10px">🎯 <b>Las 4 para el sorteo del ${fmtFecha(prox)}</b></div>
+      <div class="sub" style="margin-top:10px">🎯 <b>La jugada para el sorteo del ${fmtFecha(prox)}</b></div>
       ${mostrar.map((c,i)=>`<div class="row"><span class="date">${i+1}</span>${bolasR(c)}</div><div class="note" style="margin:-2px 0 6px">${porque(c)}</div>`).join("")}
-      <div style="margin-top:6px"><button id="btnOtra" class="sec">🔄 Dame otra jugada</button></div><div id="extrasBox"></div>
+      <div style="margin-top:6px"><button id="btnOtra" class="sec">🔄 Dame otra opción</button></div><div id="extrasBox"></div>
       <div class="note">👉 Cuando salga ese sorteo, escríbelo arriba y toca 📝 Guardar el sorteo que salió: lo revisa, se reajusta con él y tira las 4 del siguiente.</div>
     </div>`;
     $("btnOtra").onclick = otraJugada;
