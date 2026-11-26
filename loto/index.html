@@ -63,6 +63,8 @@
   /* Solo queda "Copiar para Claude"; lo demás trabaja solo por dentro */
   #avanzado > *:not(summary):not(.keep){display:none !important}
 </style>
+<link rel="manifest" href="manifest.json">
+<script>if("serviceWorker" in navigator) addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));</script>
 </head>
 <body>
 <header>

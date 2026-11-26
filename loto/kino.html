@@ -35,6 +35,8 @@
   .flex{display:flex;gap:8px} .flex>*{flex:1}
   details summary{cursor:pointer;color:var(--mut);padding:6px 0}
 </style>
+<link rel="manifest" href="manifest.json">
+<script>if("serviceWorker" in navigator) addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));</script>
 </head>
 <body>
 <div class="mut"><a href="./">← Loto Leidsa</a></div>
