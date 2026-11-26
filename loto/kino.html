@@ -82,8 +82,8 @@ const CAMBIO84 = "2026-09-15";            // desde aquí la tómbola tiene 84 bo
 const tamDe = f => f >= CAMBIO84 ? 84 : 80;
 const PREMIO = { 10:25000000, 9:200000, 8:10000, 7:1000, 6:300, 5:60, 0:80 };
 const COSTO = 25;
-const SEN = ["calientes","frecuencia","atrasados","arrastre"];
-const NOMSEN = { calientes:"calientes (últimos sorteos)", frecuencia:"los que más salen", atrasados:"atrasados", arrastre:"arrastre (siguen al sorteo anterior)" };
+const SEN = ["calientes","frecuencia","atrasados","arrastre","repetidores"];
+const NOMSEN = { calientes:"calientes (últimos sorteos)", frecuencia:"los que más salen", atrasados:"atrasados", arrastre:"arrastre (siguen al sorteo anterior)", repetidores:"repetidores (salieron ayer y anteayer)" };
 let CFG = { ventanaFrec: 0, fuerteReciente: true, fatigaMax: 3, formaCondicional: false, aprendizaje: 0.05 };
 const fmt = n => n.toLocaleString("es-DO");
 const pct = x => (x*100).toFixed(x<0.01?3:1) + "%";
@@ -103,7 +103,7 @@ const AZAR = {}; [80,84].forEach(N=>AZAR[N] = [...Array(11).keys()].map(k=>C(20,
 function nuevoEstado(){
   return { n:0, freq:new Float64Array(85), expo:new Float64Array(85), ewma:new Float64Array(85), ultimo:new Int32Array(85).fill(-1),
            T:Array.from({length:85},()=>new Float32Array(85)), sal:new Float64Array(85), prev:null, formas:[], hist:[], fatiga:new Int32Array(85),
-           w:{ calientes:1, frecuencia:1, atrasados:1, arrastre:1 } };
+           w:{ calientes:1, frecuencia:1, atrasados:1, arrastre:1, repetidores:2 } };
 }
 function grupoDe(x){ return Math.min(8, Math.floor((x-1)/10)); }   // 1-10, 11-20 … 71-80, 81-84
 function formaDe(nums, prev, N){
@@ -122,12 +122,13 @@ function agregar(E, s){
 /* Señales de cada número, ordenadas de 0 (peor) a 1 (mejor) */
 function rangoNorm(v, N){ const idx = [...Array(N).keys()].map(i=>i+1).sort((a,b)=>v[a]-v[b]); const r = new Float64Array(85); idx.forEach((x,i)=>r[x] = N>1 ? i/(N-1) : 0); return r; }
 function senales(E, N){
-  const raw = { calientes:new Float64Array(85), frecuencia:new Float64Array(85), atrasados:new Float64Array(85), arrastre:new Float64Array(85) };
+  const raw = { calientes:new Float64Array(85), frecuencia:new Float64Array(85), atrasados:new Float64Array(85), arrastre:new Float64Array(85), repetidores:new Float64Array(85) };
   for(let x=1;x<=N;x++){
     raw.calientes[x] = E.ewma[x];
     raw.frecuencia[x] = E.expo[x] ? E.freq[x]/E.expo[x] : 0.24;
     raw.atrasados[x] = E.ultimo[x]<0 ? 30 : Math.min(30, E.n-1-E.ultimo[x]);
     let m = 0; if(E.prev) E.prev.forEach(a=>{ if(E.sal[a]) m += E.T[a][x]/E.sal[a]; }); raw.arrastre[x] = m;
+    const H3 = E.hist.slice(-3).reverse(); raw.repetidores[x] = (H3[0]&&H3[0].n.includes(x)?1:0) + (H3[1]&&H3[1].n.includes(x)?1:0) + (H3[2]&&H3[2].n.includes(x)?0.9:0) + 0.05*E.ewma[x];
   }
   if(CFG.ventanaFrec){ const H = E.hist.slice(-CFG.ventanaFrec); raw.frecuencia.fill(0); H.forEach(h=>h.n.forEach(x=>raw.frecuencia[x]++)); for(let x=1;x<=N;x++){ const ex = H.filter(h=>x<=h.N).length; raw.frecuencia[x] = ex ? raw.frecuencia[x]/ex : 0.24; } }
   const S = {}; SEN.forEach(k=>S[k] = rangoNorm(raw[k], N)); S.raw = raw; return S;
