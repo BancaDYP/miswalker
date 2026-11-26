@@ -61,6 +61,11 @@
     <option value="5">Repartidos: 5 en cada sorteo</option>
     <option value="0">Sin fuertes fijos</option>
   </select>
+  <label for="m40parte">Cómo partir cada sorteo en 2 jugadas</label>
+  <select id="m40parte" style="width:100%;background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:11px;font-size:16px">
+    <option value="inter">Intercalado: cada jugada va de abajo a arriba (la forma de las que pegan 7, 8 y 9)</option>
+    <option value="bajaalta">Bajos y altos</option>
+  </select>
   <div style="margin-top:8px"><button id="btnM40" style="background:var(--mor)">🧩 Armar las 40 y probarlas con los 6 años</button></div>
   <div class="barra" id="m40barra" style="display:none"><div></div></div>
   <div id="m40out"></div>
@@ -329,7 +334,7 @@ $("btnGuardar").onclick = ()=>{
 /* ---------- Reporte ---------- */
 $("btnReporte").onclick = ()=>{
   const datos = { generado: new Date().toISOString(), juego: "Super Kino TV", agregados: EXTRA,
-    metodo40: M40 ? { nf:M40.nf, fecha:M40.prox, fuertes:M40.F, prueba:{ dias:M40.prueba.dias, dias6:M40.prueba.d6, dias7:M40.prueba.d7, dias8:M40.prueba.d8, azar6:M40.prueba.a6, azar7:M40.prueba.a7, azar8:M40.prueba.a8, gastado:M40.prueba.jug*COSTO, ganado:M40.prueba.gan, ganadoAzar:M40.prueba.ganA, dist:M40.prueba.dist }, jugadas:M40.jugadas } : null,
+    metodo40: M40 ? { nf:M40.nf, parte:M40.parte, fecha:M40.prox, fuertes:M40.F, prueba:{ dias:M40.prueba.dias, dias6:M40.prueba.d6, dias7:M40.prueba.d7, dias8:M40.prueba.d8, azar6:M40.prueba.a6, azar7:M40.prueba.a7, azar8:M40.prueba.a8, gastado:M40.prueba.jug*COSTO, ganado:M40.prueba.gan, ganadoAzar:M40.prueba.ganA, dist:M40.prueba.dist }, jugadas:M40.jugadas } : null,
     resumen: RES ? { dias: RES.reg.length, ultimos: RES.reg.slice(-15), pesos: RES.E.w, proximas: RES.J && { fecha: RES.prox, jugadas: RES.J.P, fuertes: RES.J.F } } : null };
   const txt = JSON.stringify(datos);
   const ok = ()=>$("repMsg").innerHTML = '<span class="ok">✅ Copiado. Pégalo en el chat con Claude.</span>';
@@ -355,7 +360,8 @@ function probar(cfg){
 
 /* ---------- Método 40 ---------- */
 /* Método 40: 20 sorteos de 20 que cubren todo, con los 10 más fuertes del mes en todos, copiando la forma de sorteos reales */
-function metodo40(E, N, rnd, nf){
+function metodo40(E, N, rnd, nf, parte){
+  parte = parte || 'inter';
   nf = nf==null ? 10 : nf;
   rnd = rnd || Math.random;
   const H = E.hist.filter(h=>h.N===N).slice(-30), HH = H.length>=20 ? H : E.hist.slice(-30);
@@ -395,19 +401,19 @@ function metodo40(E, N, rnd, nf){
       sorteos.forEach((s,si)=>{ if(s.includes(x)) return; s.forEach((y,yi)=>{ if(!Fs.has(y) && uso[y]>=2 && ok(y) && (!mejor || uso[y]>uso[mejor.y])) mejor = {si,yi,y}; }); });
       if(mejor){ uso[mejor.y]--; uso[x]++; sorteos[mejor.si][mejor.yi] = x; sorteos[mejor.si].sort((a,b)=>a-b); break; } }
   });
-  const jugadas = []; sorteos.forEach(s=>{ jugadas.push(s.slice(0,10)); jugadas.push(s.slice(10)); });
+  const jugadas = []; sorteos.forEach(s=>{ if(parte==='inter'){ jugadas.push(s.filter((x,i)=>i%2===0)); jugadas.push(s.filter((x,i)=>i%2===1)); } else { jugadas.push(s.slice(0,10)); jugadas.push(s.slice(10)); } });
   return { F, sorteos, jugadas };
 }
 
 let M40 = null;
 function semilla(t){ let h = 7; for(const c of t) h = (h*31 + c.charCodeAt(0)) % 2147483647; let s = h || 7; return ()=>{ s = (s*16807) % 2147483647; return s/2147483647; }; }
 function correrM40(){
-  const nf = +$("m40nf").value, T = sorteos(), E = nuevoEstado(), rnd = semilla("m40-"+nf), rndA = semilla("azar");
+  const nf = +$("m40nf").value, parte = $("m40parte").value, T = sorteos(), E = nuevoEstado(), rnd = semilla("m40-"+nf+parte), rndA = semilla("azar");
   const R = { dias:0, d6:0, d7:0, d8:0, a6:0, a7:0, a8:0, dist:new Array(11).fill(0), gan:0, ganA:0, jug:0 }; let i = 0;
   $("btnM40").disabled = true; $("m40barra").style.display = ""; const barra = $("m40barra").firstElementChild;
   const paso = ()=>{ const t0 = performance.now();
     while(i<T.length && performance.now()-t0<40){ const s = T[i];
-      if(i>=60 && s.n.length===20){ const M = metodo40(E, s.N, rnd, nf);
+      if(i>=60 && s.n.length===20){ const M = metodo40(E, s.N, rnd, nf, parte);
         if(M){ R.dias++; const ac = M.jugadas.map(p=>p.filter(x=>s.n.includes(x)).length); ac.forEach(a=>{ R.dist[a]++; R.gan += PREMIO[a]||0; R.jug++; });
           const m = Math.max(...ac); if(m>=6) R.d6++; if(m>=7) R.d7++; if(m>=8) R.d8++;
           let am = 0; for(let k=0;k<40;k++){ const a = [...Array(s.N).keys()].map(q=>q+1); for(let q=0;q<10;q++){ const j = q+Math.floor(rndA()*(a.length-q)); [a[q],a[j]] = [a[j],a[q]]; } const h = a.slice(0,10).filter(x=>s.n.includes(x)).length; R.ganA += PREMIO[h]||0; if(h>am) am = h; }
@@ -416,13 +422,13 @@ function correrM40(){
     barra.style.width = (i/T.length*100).toFixed(1)+"%";
     if(i<T.length){ setTimeout(paso, 0); return; }
     $("btnM40").disabled = false; $("m40barra").style.display = "none";
-    const ult = T[T.length-1], N = tamDe(siguienteFecha(ult.f)), M = metodo40(E, N, semilla("hoy-"+ult.f+"-"+nf), nf);
-    M40 = { nf, prox: siguienteFecha(ult.f), F: M.F, sorteos: M.sorteos, jugadas: M.jugadas, prueba: R };
+    const ult = T[T.length-1], N = tamDe(siguienteFecha(ult.f)), M = metodo40(E, N, semilla("hoy-"+ult.f+"-"+nf), nf, parte);
+    M40 = { nf, parte, prox: siguienteFecha(ult.f), F: M.F, sorteos: M.sorteos, jugadas: M.jugadas, prueba: R };
     pintarM40(); };
   setTimeout(paso, 20);
 }
 function pintarM40(){
-  const { F, sorteos: Z, prox, prueba: R, nf } = M40, fs = new Set(F), costo = R.jug*COSTO, cada = d => d ? `1 de cada ${Math.round(R.dias/d)} días` : "nunca";
+  const { F, sorteos: Z, prox, prueba: R, nf, parte, jugadas: JJ } = M40, fs = new Set(F), costo = R.jug*COSTO, cada = d => d ? `1 de cada ${Math.round(R.dias/d)} días` : "nunca";
   $("m40out").innerHTML = `
     <div class="note">⭐ Los 10 que más salieron en el último mes: <b>${[...F].sort((a,b)=>a-b).join(" · ")}</b></div>
     <div class="sub">📊 Probado día por día (${fmt(R.dias)} días, sin ver el sorteo antes)</div>
@@ -435,9 +441,7 @@ function pintarM40(){
     <div class="note">Aciertos de las ${fmt(R.jug)} jugadas: ${R.dist.map((v,k)=>v?`${k}: ${fmt(v)}`:null).filter(Boolean).join(" · ")}</div>
     <div class="sub">🎯 Las 40 jugadas para el ${fmtF(prox)}</div>
     ${Z.map((z,i)=>`<div class="jug"><b>Sorteo ${i+1}</b>
-      <div class="balls">${z.slice(0,10).map(x=>`<div class="ball ${fs.has(x)?"fuerte":""}">${x}</div>`).join("")}</div>
-      <div class="balls">${z.slice(10).map(x=>`<div class="ball ${fs.has(x)?"fuerte":""}">${x}</div>`).join("")}</div>
-      <span class="mut">Jugada ${2*i+1}: bajos · Jugada ${2*i+2}: altos</span></div>`).join("")}`;
+      ${[0,1].map(k=>`<span class="mut">Jugada ${2*i+k+1}${parte==='inter'?'':k?': altos':': bajos'}</span><div class="balls">${JJ[2*i+k].map(x=>`<div class="ball ${fs.has(x)?"fuerte":""}">${x}</div>`).join("")}</div>`).join("")}</div>`).join("")}`;
 }
 $("btnM40").addEventListener("click", correrM40);
 </script>
