@@ -206,7 +206,12 @@ function correr(){
       const s = T[i];
       if(i>=INI){ const J = jugadas(E, s.N);
         if(J){ const S = J.S; const ac = J.P.map(p=>p.filter(x=>s.n.includes(x)).length);
-          reg.push({ f:s.f, N:s.N, ac, valido: s.n.length===20, fuertes:J.F.map(f=>f.x), fuertesPeg:J.F.filter(f=>s.n.includes(f.x)).length });
+          const fr = formaDe(s.n, E.prev, s.N);
+          reg.push({ f:s.f, N:s.N, ac, valido: s.n.length===20, fuertes:J.F.map(f=>f.x), fuertesPeg:J.F.filter(f=>s.n.includes(f.x)).length,
+            jug: J.P, real: s.n, pesos: { ...E.w },
+            forma: { objetivo: { pares:+J.obj.pares.toFixed(1), repite:+J.obj.repetidos.toFixed(1), grupos:J.obj.grupos.map(g=>+g.toFixed(1)) },
+                     salio: { pares:fr.pares, repite:fr.repetidos, grupos:fr.grupos } },
+            lecturaPeg: [J.L1.filter(x=>s.n.includes(x)).length, J.L2.filter(x=>s.n.includes(x)).length] });
           aprender(E, S, s.N, s.n); } }
       agregar(E, s); i++;
     }
@@ -301,7 +306,10 @@ $("btnGuardar").onclick = ()=>{
 /* ---------- Reporte ---------- */
 $("btnReporte").onclick = ()=>{
   const datos = { generado: new Date().toISOString(), juego: "Super Kino TV", agregados: EXTRA,
-    resumen: RES ? { dias: RES.reg.length, ultimos: RES.reg.slice(-15), pesos: RES.E.w, proximas: RES.J && { fecha: RES.prox, jugadas: RES.J.P, fuertes: RES.J.F } } : null };
+    resumen: RES ? { dias: RES.reg.length, pesos: RES.E.w,
+      totales: (()=>{ const R = RES.reg.filter(r=>r.valido), d = new Array(11).fill(0), m = new Array(11).fill(0); R.forEach(r=>{ r.ac.forEach(a=>d[a]++); m[Math.max(...r.ac)]++; }); return { dias:R.length, aciertos:d, mejorDelDia:m }; })(),
+      totales84: (()=>{ const R = RES.reg.filter(r=>r.valido && r.N===84), d = new Array(11).fill(0); R.forEach(r=>r.ac.forEach(a=>d[a]++)); return { dias:R.length, aciertos:d }; })(),
+      cajaNegra: RES.reg.slice(-30), proximas: RES.J && { fecha: RES.prox, jugadas: RES.J.P, fuertes: RES.J.F } } : null };
   const txt = JSON.stringify(datos);
   const ok = ()=>$("repMsg").innerHTML = '<span class="ok">✅ Copiado. Pégalo en el chat con Claude.</span>';
   const viejo = ()=>{ const t = document.createElement("textarea"); t.value = txt; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); ok(); } catch(e){ $("repMsg").textContent = "No se pudo copiar."; } t.remove(); };
