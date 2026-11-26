@@ -82,6 +82,7 @@ const PREMIO = { 10:25000000, 9:200000, 8:10000, 7:1000, 6:300, 5:60, 0:80 };
 const COSTO = 25;
 const SEN = ["calientes","frecuencia","atrasados","arrastre"];
 const NOMSEN = { calientes:"calientes (últimos sorteos)", frecuencia:"los que más salen", atrasados:"atrasados", arrastre:"arrastre (siguen al sorteo anterior)" };
+let CFG = { ventanaFrec: 0, fuerteReciente: true, fatigaMax: 3, formaCondicional: false, aprendizaje: 0.05 };
 const fmt = n => n.toLocaleString("es-DO");
 const pct = x => (x*100).toFixed(x<0.01?3:1) + "%";
 const fmtF = f => { const [y,m,d] = f.split("-"); return `${+d} ${["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][+m-1]} ${y}`; };
@@ -99,7 +100,7 @@ const AZAR = {}; [80,84].forEach(N=>AZAR[N] = [...Array(11).keys()].map(k=>C(20,
 /* ---------- Estado que va aprendiendo ---------- */
 function nuevoEstado(){
   return { n:0, freq:new Float64Array(85), expo:new Float64Array(85), ewma:new Float64Array(85), ultimo:new Int32Array(85).fill(-1),
-           T:Array.from({length:85},()=>new Float32Array(85)), sal:new Float64Array(85), prev:null, formas:[],
+           T:Array.from({length:85},()=>new Float32Array(85)), sal:new Float64Array(85), prev:null, formas:[], hist:[], fatiga:new Int32Array(85),
            w:{ calientes:1, frecuencia:1, atrasados:1, arrastre:1 } };
 }
 function grupoDe(x){ return Math.min(8, Math.floor((x-1)/10)); }   // 1-10, 11-20 … 71-80, 81-84
@@ -114,7 +115,7 @@ function agregar(E, s){
   if(E.prev) E.prev.forEach(a=>{ E.sal[a]++; s.n.forEach(b=>E.T[a][b]++); });
   for(let x=1;x<=s.N;x++){ E.expo[x]++; E.ewma[x] = E.ewma[x]*0.9 + (set.has(x)?0.1:0); }
   s.n.forEach(x=>{ E.freq[x]++; E.ultimo[x] = E.n; });
-  E.formas.push(formaDe(s.n, E.prev, s.N)); E.prev = s.n; E.n++;
+  E.formas.push(formaDe(s.n, E.prev, s.N)); E.hist.push(s); E.prev = s.n; E.n++;
 }
 /* Señales de cada número, ordenadas de 0 (peor) a 1 (mejor) */
 function rangoNorm(v, N){ const idx = [...Array(N).keys()].map(i=>i+1).sort((a,b)=>v[a]-v[b]); const r = new Float64Array(85); idx.forEach((x,i)=>r[x] = N>1 ? i/(N-1) : 0); return r; }
@@ -126,13 +127,14 @@ function senales(E, N){
     raw.atrasados[x] = E.ultimo[x]<0 ? 30 : Math.min(30, E.n-1-E.ultimo[x]);
     let m = 0; if(E.prev) E.prev.forEach(a=>{ if(E.sal[a]) m += E.T[a][x]/E.sal[a]; }); raw.arrastre[x] = m;
   }
+  if(CFG.ventanaFrec){ const H = E.hist.slice(-CFG.ventanaFrec); raw.frecuencia.fill(0); H.forEach(h=>h.n.forEach(x=>raw.frecuencia[x]++)); for(let x=1;x<=N;x++){ const ex = H.filter(h=>x<=h.N).length; raw.frecuencia[x] = ex ? raw.frecuencia[x]/ex : 0.24; } }
   const S = {}; SEN.forEach(k=>S[k] = rangoNorm(raw[k], N)); S.raw = raw; return S;
 }
 function puntaje(S, w, N){ const sc = new Float64Array(85); let t = 0; SEN.forEach(k=>t += w[k]); for(let x=1;x<=N;x++){ let v = 0; SEN.forEach(k=>v += w[k]*S[k][x]); sc[x] = v/t; } return sc; }
 function aprender(E, S, N, real){
   const esp = 20*20/N, cob = {};
   SEN.forEach(k=>{ const top = [...Array(N).keys()].map(i=>i+1).sort((a,b)=>S[k][b]-S[k][a]).slice(0,20);
-    cob[k] = top.filter(x=>real.includes(x)).length; E.w[k] = Math.min(5, Math.max(0.2, E.w[k]*Math.exp(0.05*(cob[k]-esp)))); });
+    cob[k] = top.filter(x=>real.includes(x)).length; E.w[k] = Math.min(5, Math.max(0.2, E.w[k]*Math.exp(CFG.aprendizaje*(cob[k]-esp)))); });
   return cob;
 }
 /* La forma que viene saliendo (promedio de los últimos 10 del mismo tamaño de tómbola) */
@@ -141,6 +143,12 @@ function formaObjetivo(E, N){
   const m = k => F.reduce((a,f)=>a+f[k],0)/F.length;
   const grupos = [...Array(9).keys()].map(g=>F.reduce((a,f)=>a+f.grupos[g],0)/F.length);
   const R = F.filter(f=>f.repetidos!=null);
+  if(CFG.formaCondicional && E.formas.length>60){
+    const U = E.formas[E.formas.length-1], A = E.formas.filter(f=>f.N===N || N===84);
+    const cond = (k, tol) => { const v = []; for(let i=1;i<E.formas.length;i++){ const p = E.formas[i-1], c = E.formas[i]; if(p[k]!=null && c[k]!=null && Math.abs(p[k]-U[k])<=tol) v.push(c[k]); } return v.length>=20 ? v.reduce((a,b)=>a+b,0)/v.length : null; };
+    const cp = cond("pares",1), cr = cond("repetidos",1);
+    return { pares: cp ?? m("pares"), bajos: m("bajos"), suma: m("suma"), seguidos: m("seguidos"), grupos, repetidos: cr ?? (R.length ? R.reduce((a,f)=>a+f.repetidos,0)/R.length : 20*20/N) };
+  }
   return { pares: m("pares"), bajos: m("bajos"), suma: m("suma"), seguidos: m("seguidos"), grupos, repetidos: R.length ? R.reduce((a,f)=>a+f.repetidos,0)/R.length : 20*20/N };
 }
 /* Una lectura: 20 números con la forma objetivo, eligiendo por puntaje */
@@ -175,9 +183,11 @@ function lectura(sc, N, obj, prev, excluir){
   return [...elegido].sort((a,b)=>a-b);
 }
 /* Números fuertes: se separan claramente del resto */
-function fuertesDe(sc, N){
+function fuertesDe(sc, N, E){
   const v = []; for(let x=1;x<=N;x++) v.push(sc[x]); const m = v.reduce((a,b)=>a+b,0)/N, sd = Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/N) || 1;
-  return [...Array(N).keys()].map(i=>i+1).map(x=>({ x, z:(sc[x]-m)/sd })).filter(o=>o.z>=1.8).sort((a,b)=>b.z-a.z).slice(0,3)
+  const rec = x => E ? E.hist.slice(-10).filter(h=>h.n.includes(x)).length : 9;
+  return [...Array(N).keys()].map(i=>i+1).map(x=>({ x, z:(sc[x]-m)/sd })).filter(o=>o.z>=1.8)
+    .filter(o=>!CFG.fuerteReciente || rec(o.x)>=4).filter(o=>!CFG.fatigaMax || !E || E.fatiga[o.x]<CFG.fatigaMax).sort((a,b)=>b.z-a.z).slice(0,3)
          .map((o,i)=>({ ...o, veces: i===0 && o.z>=2.2 ? 3 : 2 }));
 }
 /* Las 4 jugadas */
@@ -188,7 +198,7 @@ function jugadas(E, N){
   const L2 = lectura(sc, N, obj, E.prev, new Set(L1));
   const partir = L => { const o = [...L].sort((a,b)=>sc[b]-sc[a]), A = [], B = []; o.forEach((x,i)=>((i%4===0||i%4===3) ? A : B).push(x)); return [A,B]; };
   const [P1,P2] = partir(L1), [P3,P4] = partir(L2), P = [P1,P2,P3,P4];
-  const F = fuertesDe(sc, N), fuertes = new Set(F.map(f=>f.x));
+  const F = fuertesDe(sc, N, E), fuertes = new Set(F.map(f=>f.x));
   F.forEach(f=>{ let tiene = P.filter(p=>p.includes(f.x)).length;
     for(const p of [P[2],P[3],P[1],P[0]]){ if(tiene>=f.veces) break; if(p.includes(f.x)) continue;
       const quitar = p.filter(x=>!fuertes.has(x)).sort((a,b)=>sc[a]-sc[b])[0]; p.splice(p.indexOf(quitar),1,f.x); tiene++; } });
@@ -206,12 +216,8 @@ function correr(){
       const s = T[i];
       if(i>=INI){ const J = jugadas(E, s.N);
         if(J){ const S = J.S; const ac = J.P.map(p=>p.filter(x=>s.n.includes(x)).length);
-          const fr = formaDe(s.n, E.prev, s.N);
-          reg.push({ f:s.f, N:s.N, ac, valido: s.n.length===20, fuertes:J.F.map(f=>f.x), fuertesPeg:J.F.filter(f=>s.n.includes(f.x)).length,
-            jug: J.P, real: s.n, pesos: { ...E.w },
-            forma: { objetivo: { pares:+J.obj.pares.toFixed(1), repite:+J.obj.repetidos.toFixed(1), grupos:J.obj.grupos.map(g=>+g.toFixed(1)) },
-                     salio: { pares:fr.pares, repite:fr.repetidos, grupos:fr.grupos } },
-            lecturaPeg: [J.L1.filter(x=>s.n.includes(x)).length, J.L2.filter(x=>s.n.includes(x)).length] });
+          reg.push({ f:s.f, N:s.N, ac, valido: s.n.length===20, fuertes:J.F.map(f=>f.x), fuertesPeg:J.F.filter(f=>s.n.includes(f.x)).length });
+          J.F.forEach(f=>{ if(s.n.includes(f.x)) E.fatiga[f.x] = 0; else E.fatiga[f.x]++; });
           aprender(E, S, s.N, s.n); } }
       agregar(E, s); i++;
     }
@@ -306,10 +312,7 @@ $("btnGuardar").onclick = ()=>{
 /* ---------- Reporte ---------- */
 $("btnReporte").onclick = ()=>{
   const datos = { generado: new Date().toISOString(), juego: "Super Kino TV", agregados: EXTRA,
-    resumen: RES ? { dias: RES.reg.length, pesos: RES.E.w,
-      totales: (()=>{ const R = RES.reg.filter(r=>r.valido), d = new Array(11).fill(0), m = new Array(11).fill(0); R.forEach(r=>{ r.ac.forEach(a=>d[a]++); m[Math.max(...r.ac)]++; }); return { dias:R.length, aciertos:d, mejorDelDia:m }; })(),
-      totales84: (()=>{ const R = RES.reg.filter(r=>r.valido && r.N===84), d = new Array(11).fill(0); R.forEach(r=>r.ac.forEach(a=>d[a]++)); return { dias:R.length, aciertos:d }; })(),
-      cajaNegra: RES.reg.slice(-30), proximas: RES.J && { fecha: RES.prox, jugadas: RES.J.P, fuertes: RES.J.F } } : null };
+    resumen: RES ? { dias: RES.reg.length, ultimos: RES.reg.slice(-15), pesos: RES.E.w, proximas: RES.J && { fecha: RES.prox, jugadas: RES.J.P, fuertes: RES.J.F } } : null };
   const txt = JSON.stringify(datos);
   const ok = ()=>$("repMsg").innerHTML = '<span class="ok">✅ Copiado. Pégalo en el chat con Claude.</span>';
   const viejo = ()=>{ const t = document.createElement("textarea"); t.value = txt; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); ok(); } catch(e){ $("repMsg").textContent = "No se pudo copiar."; } t.remove(); };
@@ -319,6 +322,18 @@ $("btnReporte").onclick = ()=>{
 function info(){ const T = sorteos(); $("info").textContent = `${fmt(T.length)} sorteos guardados · del ${fmtF(T[0].f)} al ${fmtF(T[T.length-1].f)} · 84 bolos desde el 15 sep 2026`; }
 $("btnCorrer").onclick = correr;
 info();
+
+/* prueba rápida sin pantalla (para comparar mejoras) */
+function probar(cfg){
+  const viejo = CFG; CFG = { ...CFG, ...cfg }; const T = sorteos(), E = nuevoEstado(); let n = 0, suma = 0, esp = 0, cinco = 0, cincoAz = 0, lect = 0, lectEsp = 0, fuM = 0, fuP = 0, n84 = 0, s84 = 0, e84 = 0, gan = 0;
+  T.forEach((s,i)=>{ if(i>=30){ const J = jugadas(E, s.N); if(J){ if(s.n.length===20){ J.P.forEach(p=>{ const a = p.filter(x=>s.n.includes(x)).length; suma += a; esp += 10*20/s.N; n++; if(a>=5) cinco++; gan += PREMIO[a]&&a<9 ? PREMIO[a] : 0; if(s.N===84){ n84++; s84 += a; e84 += 10*20/84; } });
+      cincoAz += 4*AZAR[s.N].slice(5).reduce((a,b)=>a+b,0); lect += J.L1.filter(x=>s.n.includes(x)).length + J.L2.filter(x=>s.n.includes(x)).length; lectEsp += 2*20*20/s.N;
+      J.F.forEach(f=>{ fuM++; if(s.n.includes(f.x)) fuP++; }); }
+      J.F.forEach(f=>{ if(s.n.includes(f.x)) E.fatiga[f.x] = 0; else E.fatiga[f.x]++; });
+      aprender(E, J.S, s.N, s.n); } } agregar(E, s); });
+  CFG = viejo;
+  return { ventaja: +((suma-esp)/n).toFixed(4), cincoMas: +(cinco/n*100).toFixed(2), cincoAzar: +(cincoAz/n*100).toFixed(2), lectura: +((lect-lectEsp)/(n/4)).toFixed(3), ventaja84: +((s84-e84)/n84).toFixed(3), fuertes: fuM ? +(fuP/fuM*100).toFixed(1) : null, fuertesN: fuM, ganadoSin9y10: gan };
+}
 </script>
 </body>
 </html>
