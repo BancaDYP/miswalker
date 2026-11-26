@@ -52,6 +52,20 @@
 <div id="sugBox"></div>
 <div id="tablasBox"></div>
 
+<div class="card" id="m40card">
+  <div class="sub">🧩 Método 40 jugadas (20 sorteos de 20)</div>
+  <div class="note">Toma los 10 que más salieron en el último mes, arma 20 sorteos de 20 copiando la forma de los últimos 20 sorteos reales, sin dejar fuera ningún número, y parte cada uno en bajos y altos: 40 jugadas.</div>
+  <label for="m40nf">Los 10 fuertes</label>
+  <select id="m40nf" style="width:100%;background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:11px;font-size:16px">
+    <option value="10">En los 20 sorteos (tu forma)</option>
+    <option value="5">Repartidos: 5 en cada sorteo</option>
+    <option value="0">Sin fuertes fijos</option>
+  </select>
+  <div style="margin-top:8px"><button id="btnM40" style="background:var(--mor)">🧩 Armar las 40 y probarlas con los 6 años</button></div>
+  <div class="barra" id="m40barra" style="display:none"><div></div></div>
+  <div id="m40out"></div>
+</div>
+
 <div class="card">
   <div class="sub">📝 Guardar el sorteo que salió</div>
   <label for="fechaNuevo">Fecha del sorteo</label>
@@ -315,6 +329,7 @@ $("btnGuardar").onclick = ()=>{
 /* ---------- Reporte ---------- */
 $("btnReporte").onclick = ()=>{
   const datos = { generado: new Date().toISOString(), juego: "Super Kino TV", agregados: EXTRA,
+    metodo40: M40 ? { nf:M40.nf, fecha:M40.prox, fuertes:M40.F, prueba:{ dias:M40.prueba.dias, dias6:M40.prueba.d6, dias7:M40.prueba.d7, dias8:M40.prueba.d8, azar6:M40.prueba.a6, azar7:M40.prueba.a7, azar8:M40.prueba.a8, gastado:M40.prueba.jug*COSTO, ganado:M40.prueba.gan, ganadoAzar:M40.prueba.ganA, dist:M40.prueba.dist }, jugadas:M40.jugadas } : null,
     resumen: RES ? { dias: RES.reg.length, ultimos: RES.reg.slice(-15), pesos: RES.E.w, proximas: RES.J && { fecha: RES.prox, jugadas: RES.J.P, fuertes: RES.J.F } } : null };
   const txt = JSON.stringify(datos);
   const ok = ()=>$("repMsg").innerHTML = '<span class="ok">✅ Copiado. Pégalo en el chat con Claude.</span>';
@@ -337,6 +352,94 @@ function probar(cfg){
   CFG = viejo;
   return { ventaja: +((suma-esp)/n).toFixed(4), cincoMas: +(cinco/n*100).toFixed(2), cincoAzar: +(cincoAz/n*100).toFixed(2), lectura: +((lect-lectEsp)/(n/4)).toFixed(3), ventaja84: +((s84-e84)/n84).toFixed(3), fuertes: fuM ? +(fuP/fuM*100).toFixed(1) : null, fuertesN: fuM, ganadoSin9y10: gan };
 }
+
+/* ---------- Método 40 ---------- */
+/* Método 40: 20 sorteos de 20 que cubren todo, con los 10 más fuertes del mes en todos, copiando la forma de sorteos reales */
+function metodo40(E, N, rnd, nf){
+  nf = nf==null ? 10 : nf;
+  rnd = rnd || Math.random;
+  const H = E.hist.filter(h=>h.N===N).slice(-30), HH = H.length>=20 ? H : E.hist.slice(-30);
+  if(HH.length<20) return null;
+  const c = new Float64Array(85); HH.forEach((h,i)=>h.n.forEach(x=>{ if(x<=N) c[x] += 1 + i*1e-4; }));
+  const todos = [...Array(N).keys()].map(i=>i+1);
+  const F = [...todos].sort((a,b)=>c[b]-c[a]).slice(0,10);
+  const Fs = new Set(F), resto = todos.filter(x=>!Fs.has(x) || nf<10);
+  const g = x => Math.min(8, Math.floor((x-1)/10));
+  const uso = new Float64Array(85); const sorteos = [];
+  const moldes = HH.slice(-20);                       // la forma de los últimos 20 sorteos reales
+  moldes.forEach((m,mi)=>{
+    const Fm = [...Array(nf).keys()].map(j=>F[(mi*nf+j)%10]);
+    const meta = new Array(9).fill(0); m.n.forEach(x=>meta[g(x)]++);
+    Fm.forEach(x=>meta[g(x)]--);                       // los fuertes ya ocupan su sitio
+    const impMeta = m.n.filter(x=>x%2).length - Fm.filter(x=>x%2).length;
+    let falta = meta.map(v=>Math.max(0,v)); let tot = falta.reduce((a,b)=>a+b,0);
+    // ajustar a 10 exactos
+    const quiero = 20-nf;
+    while(tot>quiero){ const k = falta.indexOf(Math.max(...falta)); falta[k]--; tot--; }
+    while(tot<quiero){ const k = Math.floor(rnd()*9); const cap = resto.filter(x=>g(x)===k && !Fm.includes(x)).length; if(falta[k]<cap){ falta[k]++; tot++; } }
+    const elegidos = [];
+    for(let k=0;k<9;k++){ const cand = resto.filter(x=>g(x)===k && !Fm.includes(x)).sort((a,b)=>(uso[a]-uso[b]) || (rnd()-0.5)); elegidos.push(...cand.slice(0,falta[k])); }
+    // pares/impares como el molde: cambiar por vecino del mismo grupo
+    let imp = elegidos.filter(x=>x%2).length, tries = 0;
+    while(imp!==impMeta && tries<20){ tries++;
+      const quiero = imp<impMeta ? 1 : 0; const i = elegidos.findIndex(x=>x%2!==quiero); if(i<0) break;
+      const x = elegidos[i]; const alt = resto.filter(y=>g(y)===g(x) && y%2===quiero && !elegidos.includes(y) && !Fm.includes(y)).sort((a,b)=>uso[a]-uso[b])[0];
+      if(!alt) { elegidos.push(elegidos.splice(i,1)[0]); continue; } elegidos[i] = alt; imp += quiero ? 1 : -1; }
+    elegidos.forEach(x=>uso[x]++);
+    sorteos.push([...Fm, ...elegidos].sort((a,b)=>a-b));
+  });
+  // asegurar que ningún número quede fuera: meter los que faltan en lugar del más repetido de su grupo
+  resto.filter(x=>!uso[x]).forEach(x=>{
+    const pruebas = [y=>g(y)===g(x) && (y%2)===(x%2), y=>g(y)===g(x), y=>(y%2)===(x%2), y=>true];
+    for(const ok of pruebas){ let mejor = null;
+      sorteos.forEach((s,si)=>{ if(s.includes(x)) return; s.forEach((y,yi)=>{ if(!Fs.has(y) && uso[y]>=2 && ok(y) && (!mejor || uso[y]>uso[mejor.y])) mejor = {si,yi,y}; }); });
+      if(mejor){ uso[mejor.y]--; uso[x]++; sorteos[mejor.si][mejor.yi] = x; sorteos[mejor.si].sort((a,b)=>a-b); break; } }
+  });
+  const jugadas = []; sorteos.forEach(s=>{ jugadas.push(s.slice(0,10)); jugadas.push(s.slice(10)); });
+  return { F, sorteos, jugadas };
+}
+
+let M40 = null;
+function semilla(t){ let h = 7; for(const c of t) h = (h*31 + c.charCodeAt(0)) % 2147483647; let s = h || 7; return ()=>{ s = (s*16807) % 2147483647; return s/2147483647; }; }
+function correrM40(){
+  const nf = +$("m40nf").value, T = sorteos(), E = nuevoEstado(), rnd = semilla("m40-"+nf), rndA = semilla("azar");
+  const R = { dias:0, d6:0, d7:0, d8:0, a6:0, a7:0, a8:0, dist:new Array(11).fill(0), gan:0, ganA:0, jug:0 }; let i = 0;
+  $("btnM40").disabled = true; $("m40barra").style.display = ""; const barra = $("m40barra").firstElementChild;
+  const paso = ()=>{ const t0 = performance.now();
+    while(i<T.length && performance.now()-t0<40){ const s = T[i];
+      if(i>=60 && s.n.length===20){ const M = metodo40(E, s.N, rnd, nf);
+        if(M){ R.dias++; const ac = M.jugadas.map(p=>p.filter(x=>s.n.includes(x)).length); ac.forEach(a=>{ R.dist[a]++; R.gan += PREMIO[a]||0; R.jug++; });
+          const m = Math.max(...ac); if(m>=6) R.d6++; if(m>=7) R.d7++; if(m>=8) R.d8++;
+          let am = 0; for(let k=0;k<40;k++){ const a = [...Array(s.N).keys()].map(q=>q+1); for(let q=0;q<10;q++){ const j = q+Math.floor(rndA()*(a.length-q)); [a[q],a[j]] = [a[j],a[q]]; } const h = a.slice(0,10).filter(x=>s.n.includes(x)).length; R.ganA += PREMIO[h]||0; if(h>am) am = h; }
+          if(am>=6) R.a6++; if(am>=7) R.a7++; if(am>=8) R.a8++; } }
+      agregar(E, s); i++; }
+    barra.style.width = (i/T.length*100).toFixed(1)+"%";
+    if(i<T.length){ setTimeout(paso, 0); return; }
+    $("btnM40").disabled = false; $("m40barra").style.display = "none";
+    const ult = T[T.length-1], N = tamDe(siguienteFecha(ult.f)), M = metodo40(E, N, semilla("hoy-"+ult.f+"-"+nf), nf);
+    M40 = { nf, prox: siguienteFecha(ult.f), F: M.F, sorteos: M.sorteos, jugadas: M.jugadas, prueba: R };
+    pintarM40(); };
+  setTimeout(paso, 20);
+}
+function pintarM40(){
+  const { F, sorteos: Z, prox, prueba: R, nf } = M40, fs = new Set(F), costo = R.jug*COSTO, cada = d => d ? `1 de cada ${Math.round(R.dias/d)} días` : "nunca";
+  $("m40out").innerHTML = `
+    <div class="note">⭐ Los 10 que más salieron en el último mes: <b>${[...F].sort((a,b)=>a-b).join(" · ")}</b></div>
+    <div class="sub">📊 Probado día por día (${fmt(R.dias)} días, sin ver el sorteo antes)</div>
+    <table><tr><th></th><th>Este método</th><th>40 al azar</th></tr>
+      <tr><td>Días con 6 o más</td><td>${fmt(R.d6)}</td><td>${fmt(R.a6)}</td></tr>
+      <tr><td>Días con 7 o más</td><td><b>${fmt(R.d7)}</b><br><span class="mut">${cada(R.d7)}</span></td><td>${fmt(R.a7)}<br><span class="mut">${R.a7?`1 de cada ${Math.round(R.dias/R.a7)} días`:"nunca"}</span></td></tr>
+      <tr><td>Días con 8 o más</td><td>${fmt(R.d8)}</td><td>${fmt(R.a8)}</td></tr>
+      <tr><td>Gastado (RD$${COSTO} × 40 al día)</td><td>RD$${fmt(costo)}</td><td>RD$${fmt(costo)}</td></tr>
+      <tr><td>Ganado</td><td>RD$${fmt(R.gan)}</td><td>RD$${fmt(R.ganA)}</td></tr></table>
+    <div class="note">Aciertos de las ${fmt(R.jug)} jugadas: ${R.dist.map((v,k)=>v?`${k}: ${fmt(v)}`:null).filter(Boolean).join(" · ")}</div>
+    <div class="sub">🎯 Las 40 jugadas para el ${fmtF(prox)}</div>
+    ${Z.map((z,i)=>`<div class="jug"><b>Sorteo ${i+1}</b>
+      <div class="balls">${z.slice(0,10).map(x=>`<div class="ball ${fs.has(x)?"fuerte":""}">${x}</div>`).join("")}</div>
+      <div class="balls">${z.slice(10).map(x=>`<div class="ball ${fs.has(x)?"fuerte":""}">${x}</div>`).join("")}</div>
+      <span class="mut">Jugada ${2*i+1}: bajos · Jugada ${2*i+2}: altos</span></div>`).join("")}`;
+}
+$("btnM40").addEventListener("click", correrM40);
 </script>
 </body>
 </html>
