@@ -43,6 +43,12 @@
 <h1>🎰 Super Kino TV · La máquina</h1>
 <div class="mut" id="info"></div>
 
+<div class="card prin" id="fijasCard">
+  <div class="sub">🔒 Las 4 jugadas fijas</div>
+  <div class="note">Los 40 mejores números de la máquina (repetidores, arrastre, calientes, frecuencia), repartidos con la forma de las jugadas que pegan 7, 8 y 9: regadas de abajo a arriba, sin seguidos y con 5-6 pares. No cambian: se comparan con todos los sorteos.</div>
+  <div id="fijasOut"></div>
+</div>
+
 <div class="card prin">
   <button id="btnCorrer">▶️ Correr la máquina</button>
   <div class="barra" id="barra" style="display:none"><div></div></div>
@@ -326,7 +332,7 @@ $("btnGuardar").onclick = ()=>{
   if(sorteos().some(s=>s.f===f) && box.dataset.ok!=="re"+f){ box.dataset.ok = "re"+f; box.innerHTML = `<span class="bad">Ya hay un sorteo del ${fmtF(f)}. Toca otra vez si quieres reemplazarlo.</span>`; return; }
   const clave = f+nums.join();
   if(box.dataset.ok!==clave && box.dataset.ok!=="re"+f){ box.dataset.ok = clave; box.innerHTML = `¿Guardar el ${fmtF(f)}: <b>${[...nums].sort((a,b)=>a-b).join(" ")}</b>? Toca otra vez para confirmar.`; return; }
-  box.dataset.ok = ""; EXTRA = EXTRA.filter(([x])=>x!==f); EXTRA.push([f, [...nums].sort((a,b)=>a-b)]); guardarExtra();
+  box.dataset.ok = ""; EXTRA = EXTRA.filter(([x])=>x!==f); EXTRA.push([f, [...nums].sort((a,b)=>a-b)]); guardarExtra(); try{ revisarFijas(); }catch(e){}
   $("numsNuevo").value = ""; box.innerHTML = `<span class="ok">✅ Guardado. Corriendo la máquina otra vez…</span>`;
   info(); correr();
 };
@@ -334,6 +340,7 @@ $("btnGuardar").onclick = ()=>{
 /* ---------- Reporte ---------- */
 $("btnReporte").onclick = ()=>{
   const datos = { generado: new Date().toISOString(), juego: "Super Kino TV", agregados: EXTRA,
+    fijas: FIJ ? { jugadas:FIJAS, todo:{ n:FIJ.todo.n, dist:FIJ.todo.dist, mejor:FIJ.todo.mejor, gastado:FIJ.todo.gastado, ganado:FIJ.todo.gan, dias7:FIJ.todo.top }, d84:{ n:FIJ.d84.n, dist:FIJ.d84.dist, mejor:FIJ.d84.mejor, ganado:FIJ.d84.gan }, ultimos:FIJ.ultimos } : null,
     metodo40: M40 ? { nf:M40.nf, parte:M40.parte, fecha:M40.prox, fuertes:M40.F, prueba:{ dias:M40.prueba.dias, dias6:M40.prueba.d6, dias7:M40.prueba.d7, dias8:M40.prueba.d8, azar6:M40.prueba.a6, azar7:M40.prueba.a7, azar8:M40.prueba.a8, gastado:M40.prueba.jug*COSTO, ganado:M40.prueba.gan, ganadoAzar:M40.prueba.ganA, dist:M40.prueba.dist }, jugadas:M40.jugadas } : null,
     resumen: RES ? { dias: RES.reg.length, ultimos: RES.reg.slice(-15), pesos: RES.E.w, proximas: RES.J && { fecha: RES.prox, jugadas: RES.J.P, fuertes: RES.J.F } } : null };
   const txt = JSON.stringify(datos);
@@ -444,6 +451,27 @@ function pintarM40(){
       ${[0,1].map(k=>`<span class="mut">Jugada ${2*i+k+1}${parte==='inter'?'':k?': altos':': bajos'}</span><div class="balls">${JJ[2*i+k].map(x=>`<div class="ball ${fs.has(x)?"fuerte":""}">${x}</div>`).join("")}</div>`).join("")}</div>`).join("")}`;
 }
 $("btnM40").addEventListener("click", correrM40);
+
+/* ---------- Las 4 fijas contra todo el historial ---------- */
+const FIJAS = [[2,12,20,24,33,38,47,55,64,75],[5,16,22,27,35,44,49,56,72,79],[6,17,21,28,36,43,52,60,71,80],[7,19,23,32,37,46,54,63,74,84]];
+let FIJ = null;
+function revisarFijas(){
+  const T = sorteos().filter(s=>s.n.length===20);
+  const hacer = L => { const R = { n:L.length, dist:FIJAS.map(()=>new Array(11).fill(0)), mejor:new Array(11).fill(0), gan:0, top:[] };
+    L.forEach(s=>{ const ac = FIJAS.map(p=>p.filter(x=>s.n.includes(x)).length); ac.forEach((a,i)=>{ R.dist[i][a]++; R.gan += PREMIO[a]||0; });
+      const m = Math.max(...ac); R.mejor[m]++; if(m>=7) R.top.push({ f:s.f, ac }); });
+    R.gastado = L.length*4*COSTO; return R; };
+  FIJ = { todo:hacer(T), d84:hacer(T.filter(s=>s.N===84)), ultimos:T.slice(-10).map(s=>({ f:s.f, ac:FIJAS.map(p=>p.filter(x=>s.n.includes(x)).length) })) };
+  const tabla = (R, t) => `<div class="sub" style="margin-top:12px">📊 ${t}: ${fmt(R.n)} sorteos</div>
+    <table><tr><th>Aciertos</th>${FIJAS.map((p,i)=>`<th>J${i+1}</th>`).join("")}<th>Mejor del día</th></tr>
+    ${[10,9,8,7,6,5].map(k=>`<tr${k>=7&&R.mejor[k]?' class="mejor"':''}><td>${k}</td>${R.dist.map(d=>`<td>${fmt(d[k])}</td>`).join("")}<td><b>${fmt(R.mejor[k])}</b></td></tr>`).join("")}</table>
+    <div class="note">Gastado: RD$${fmt(R.gastado)} · Ganado: <b class="${R.gan>=R.gastado?"ok":"bad"}">RD$${fmt(R.gan)}</b></div>
+    ${R.top.length?`<div class="note">Días con 7 o más: ${R.top.map(t=>`${fmtF(t.f)} (${t.ac.join("-")})`).join(" · ")}</div>`:""}`;
+  $("fijasOut").innerHTML = FIJAS.map((p,i)=>`<div class="jug"><b>Jugada ${i+1}</b><div class="balls">${p.map(x=>`<div class="ball">${x}</div>`).join("")}</div></div>`).join("")
+    + tabla(FIJ.todo, "Contra todo el historial") + tabla(FIJ.d84, "Solo con 84 bolos")
+    + `<div class="sub" style="margin-top:12px">🗓️ Últimos 10 sorteos</div><table><tr><th>Sorteo</th><th>J1</th><th>J2</th><th>J3</th><th>J4</th></tr>${FIJ.ultimos.slice().reverse().map(u=>`<tr><td>${fmtF(u.f)}</td>${u.ac.map(a=>`<td>${a>=5?`<b class="ok">${a}</b>`:a}</td>`).join("")}</tr>`).join("")}</table>`;
+}
+revisarFijas();
 </script>
 </body>
 </html>
